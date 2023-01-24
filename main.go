@@ -62,17 +62,13 @@ func NewVectors(file string) Vectors {
 			}
 			values = append(values, float32(n))
 		}
-		max := float32(0)
+		sum := float32(0)
 		for _, v := range values {
-			if v < 0 {
-				v = -v
-			}
-			if v > max {
-				max = v
-			}
+			sum += v * v
 		}
+		length := float32(math.Sqrt(float64(sum)))
 		for i, v := range values {
-			values[i] = v / max
+			values[i] = v / length
 		}
 		word := strings.ToLower(strings.TrimSpace(parts[0]))
 		vector := Vector{
@@ -88,10 +84,9 @@ func NewVectors(file string) Vectors {
 	return vectors
 }
 
-func main() {
-	v := NewVectors("cc.en.300.vec.gz")
+// Entropy calculates entropy
+func (v *Vectors) Entropy(input []string) (ax []float32) {
 	width := len(v.Dictionary["dog"].Vector)
-	input := []string{"and", "god", "said", "let", "there", "be", "light", "and", "there", "was"}
 	length := len(input)
 	set := tf32.NewSet()
 	set.Add("weights", width, length)
@@ -105,25 +100,33 @@ func main() {
 	l2 := tf32.Softmax(tf32.T(tf32.Mul(l1, tf32.T(set.Get("weights")))))
 	entropy := tf32.Entropy(l2)
 
+	entropy(func(a *tf32.V) bool {
+		ax = a.X
+		return true
+	})
+	return
+}
+
+func main() {
+	v := NewVectors("cc.en.300.vec.gz")
+
+	input := []string{"and", "god", "said", "let", "there", "be", "light", "and", "there", "was"}
 	type Word struct {
 		Word    string
 		Entropy float32
 	}
-	list := make([]Word, 0, length)
-	target := make([]float32, width)
-	entropy(func(a *tf32.V) bool {
-		for i := 0; i < length; i++ {
-			e := a.X[i]
-			for j, value := range v.Dictionary[input[i]].Vector {
-				target[j] += e * value
-			}
-			list = append(list, Word{
-				Word:    input[i],
-				Entropy: e,
-			})
+	list := make([]Word, 0, 8)
+	target := make([]float32, 300)
+	entropy := v.Entropy(input)
+	for i, e := range entropy {
+		for j, value := range v.Dictionary[input[i]].Vector {
+			target[j] += e * value
 		}
-		return true
-	})
+		list = append(list, Word{
+			Word:    input[i],
+			Entropy: e,
+		})
+	}
 	sort.Slice(list, func(i, j int) bool {
 		return list[i].Entropy < list[j].Entropy
 	})
@@ -131,7 +134,7 @@ func main() {
 		fmt.Println(word)
 	}
 
-	words, max := []string{}, float32(0.0)
+	words, words2, max, m := []string{}, []string{}, float32(0.0), float32(0.0)
 	for _, w := range v.List {
 		ab, aa, bb := float32(0.0), float32(0.0), float32(0.0)
 		for i, a := range w.Vector {
@@ -144,6 +147,17 @@ func main() {
 		if s > max {
 			max, words = s, append(words, w.Word)
 		}
+
+		entropy := v.Entropy(append(input, w.Word))
+		/*sum := float32(0.0)
+		for _, e := range entropy {
+			sum += e
+		}*/
+		e := entropy[len(entropy)-1]
+		if e > m {
+			m, words2 = e, append(words2, w.Word)
+		}
 	}
 	fmt.Println(words)
+	fmt.Println(words2)
 }
