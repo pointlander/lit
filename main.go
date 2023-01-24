@@ -126,7 +126,7 @@ func main() {
 		fmt.Println(word)
 	}
 
-	words, words2, max, m := []string{}, []string{}, 0.0, 0.0
+	words, words2, words3, max, m, min := []string{}, []string{}, []string{}, 0.0, 0.0, math.MaxFloat64
 	for _, w := range v.List {
 		ab, aa, bb := 0.0, 0.0, 0.0
 		for i, a := range w.Vector {
@@ -141,15 +141,18 @@ func main() {
 		}
 
 		entropy := v.Entropy(append(input, w.Word))
-		/*sum := float32(0.0)
+		sum := 0.0
 		for _, e := range entropy {
 			sum += e
-		}*/
-		e := entropy[len(entropy)-1]
-		if e > m {
-			m, words2 = e, append(words2, w.Word)
+		}
+		if sum > m {
+			m, words2 = sum, append(words2, w.Word)
+		}
+		if sum < min {
+			min, words3 = sum, append(words3, w.Word)
 		}
 	}
 	fmt.Println(words)
 	fmt.Println(words2)
+	fmt.Println(words3)
 }
