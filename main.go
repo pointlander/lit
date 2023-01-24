@@ -97,7 +97,7 @@ func (v *Vectors) Entropy(input []string) (ax []float32) {
 	}
 
 	l1 := tf32.Softmax(tf32.Mul(set.Get("weights"), set.Get("weights")))
-	l2 := tf32.Softmax(tf32.T(tf32.Mul(l1, tf32.T(set.Get("weights")))))
+	l2 := tf32.Softmax(tf32.Mul(tf32.T(set.Get("weights")), l1))
 	entropy := tf32.Entropy(l2)
 
 	entropy(func(a *tf32.V) bool {
