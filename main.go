@@ -5,10 +5,12 @@
 package main
 
 import (
+	"archive/zip"
 	"bufio"
 	"compress/gzip"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math"
 	"os"
 	"sort"
@@ -99,7 +101,98 @@ func (v *Vectors) Entropy(input []string) (ax []float64) {
 	return entropy.Data
 }
 
+// Symbols is a set of ordered symbols
+type Symbols [2]uint8
+
+// SymbolVectors are markov symbol vectors
+type SymbolVectors map[Symbols][]float64
+
+// NewSymbolVectors makes new markov symbol vector model
+func NewSymbolVectors() SymbolVectors {
+	vectors := make(SymbolVectors)
+	archive, err := zip.OpenReader("10-0.zip")
+	if err != nil {
+		panic(err)
+	}
+	defer archive.Close()
+	input, err := archive.File[0].Open()
+	if err != nil {
+		panic(err)
+	}
+	defer input.Close()
+	data, err := ioutil.ReadAll(input)
+	if err != nil {
+		panic(err)
+	}
+	var symbols Symbols
+	var prefix uint8
+	symbols[1] = data[0]
+	symbols[0] = data[1]
+	for _, symbol := range data[2:] {
+		vector := vectors[symbols]
+		if vector == nil {
+			vector = make([]float64, 256)
+		}
+		vector[prefix]++
+		vector[symbol]++
+		vectors[symbols] = vector
+		prefix, symbols[1], symbols[0] = symbols[1], symbols[0], symbol
+	}
+
+	for _, vector := range vectors {
+		sum := 0.0
+		for _, v := range vector {
+			sum += v * v
+		}
+		length := math.Sqrt(sum)
+		for i, v := range vector {
+			vector[i] = v / length
+		}
+	}
+	return vectors
+}
+
+// Entropy calculates entropy
+func (v SymbolVectors) Entropy(input []byte) (ax []float64) {
+	width := 256
+	filler := make([]float64, width)
+	length := len(input)
+	weights := NewMatrix(width, length-1)
+	for i := 1; i < length; i++ {
+		symbol := Symbols{input[i], input[i-1]}
+		vector := v[symbol]
+		if vector == nil {
+			vector = filler
+		}
+		weights.Data = append(weights.Data, vector...)
+	}
+
+	l1 := Softmax(Mul(weights, weights))
+	l2 := Softmax(Mul(T(weights), l1))
+	entropy := Entropy(l2)
+
+	return entropy.Data
+}
+
 func main() {
+	{
+		s := NewSymbolVectors()
+		fmt.Println(len(s))
+		input := []byte("1:3 And God said, Let there be light: and there was light")
+		min, symbol := math.MaxFloat64, 0
+		for i := 0; i < 256; i++ {
+			entropy := s.Entropy(append(input, byte(i)))
+			sum := 0.0
+			for _, e := range entropy {
+				sum += e
+			}
+			if sum < min {
+				min, symbol = sum, i
+			}
+		}
+		fmt.Printf("%f %c\n", min, symbol)
+	}
+
 	v := NewVectors("cc.en.300.vec.gz")
 
 	input := []string{"and", "god", "said", "let", "there", "be", "light", "and", "there", "was"}
