@@ -14,14 +14,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/pointlander/gradient/tf32"
 )
 
 // Vector is a word vector
 type Vector struct {
 	Word   string
-	Vector []float32
+	Vector []float64
 }
 
 // Vectors is a set of word vectors
@@ -54,19 +52,19 @@ func NewVectors(file string) Vectors {
 			}
 		}
 		parts := strings.Split(line, " ")
-		values := make([]float32, 0, len(parts)-1)
+		values := make([]float64, 0, len(parts)-1)
 		for _, v := range parts[1:] {
 			n, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
 			if err != nil {
 				panic(err)
 			}
-			values = append(values, float32(n))
+			values = append(values, float64(n))
 		}
-		sum := float32(0)
+		sum := 0.0
 		for _, v := range values {
 			sum += v * v
 		}
-		length := float32(math.Sqrt(float64(sum)))
+		length := math.Sqrt(sum)
 		for i, v := range values {
 			values[i] = v / length
 		}
@@ -85,26 +83,20 @@ func NewVectors(file string) Vectors {
 }
 
 // Entropy calculates entropy
-func (v *Vectors) Entropy(input []string) (ax []float32) {
+func (v *Vectors) Entropy(input []string) (ax []float64) {
 	width := len(v.Dictionary["dog"].Vector)
 	length := len(input)
-	set := tf32.NewSet()
-	set.Add("weights", width, length)
-	weights := set.ByName["weights"]
+	weights := NewMatrix(width, length)
 	for _, word := range input {
 		vector := v.Dictionary[word].Vector
-		weights.X = append(weights.X, vector...)
+		weights.Data = append(weights.Data, vector...)
 	}
 
-	l1 := tf32.Softmax(tf32.Mul(set.Get("weights"), set.Get("weights")))
-	l2 := tf32.Softmax(tf32.Mul(tf32.T(set.Get("weights")), l1))
-	entropy := tf32.Entropy(l2)
+	l1 := Softmax(Mul(weights, weights))
+	l2 := Softmax(Mul(T(weights), l1))
+	entropy := Entropy(l2)
 
-	entropy(func(a *tf32.V) bool {
-		ax = a.X
-		return true
-	})
-	return
+	return entropy.Data
 }
 
 func main() {
@@ -113,10 +105,10 @@ func main() {
 	input := []string{"and", "god", "said", "let", "there", "be", "light", "and", "there", "was"}
 	type Word struct {
 		Word    string
-		Entropy float32
+		Entropy float64
 	}
 	list := make([]Word, 0, 8)
-	target := make([]float32, 300)
+	target := make([]float64, 300)
 	entropy := v.Entropy(input)
 	for i, e := range entropy {
 		for j, value := range v.Dictionary[input[i]].Vector {
@@ -134,16 +126,16 @@ func main() {
 		fmt.Println(word)
 	}
 
-	words, words2, max, m := []string{}, []string{}, float32(0.0), float32(0.0)
+	words, words2, max, m := []string{}, []string{}, 0.0, 0.0
 	for _, w := range v.List {
-		ab, aa, bb := float32(0.0), float32(0.0), float32(0.0)
+		ab, aa, bb := 0.0, 0.0, 0.0
 		for i, a := range w.Vector {
 			b := target[i]
 			ab += a * b
 			aa += a * a
 			bb += b * b
 		}
-		s := ab / (float32(math.Sqrt(float64(aa))) * float32(math.Sqrt(float64(bb))))
+		s := ab / (math.Sqrt(aa) * math.Sqrt(bb))
 		if s > max {
 			max, words = s, append(words, w.Word)
 		}
