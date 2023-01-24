@@ -8,6 +8,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"compress/gzip"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -174,23 +175,35 @@ func (v SymbolVectors) Entropy(input []byte) (ax []float64) {
 	return entropy.Data
 }
 
-func main() {
-	{
-		s := NewSymbolVectors()
-		fmt.Println(len(s))
-		input := []byte("1:3 And God said, Let there be light: and there was light")
-		min, symbol := math.MaxFloat64, 0
-		for i := 0; i < 256; i++ {
-			entropy := s.Entropy(append(input, byte(i)))
-			sum := 0.0
-			for _, e := range entropy {
-				sum += e
-			}
-			if sum < min {
-				min, symbol = sum, i
-			}
+var (
+	// FlagMarkov mode use markov symbol vectors
+	FlagMarkov = flag.Bool("markov", false, "markov symbol vector mode")
+)
+
+func markov() {
+	s := NewSymbolVectors()
+	fmt.Println(len(s))
+	input := []byte("1:3 And God said, Let there be light: and there was light")
+	min, symbol := math.MaxFloat64, 0
+	for i := 0; i < 256; i++ {
+		entropy := s.Entropy(append(input, byte(i)))
+		sum := 0.0
+		for _, e := range entropy {
+			sum += e
 		}
-		fmt.Printf("%f %c\n", min, symbol)
+		if sum < min {
+			min, symbol = sum, i
+		}
+	}
+	fmt.Printf("%f %c\n", min, symbol)
+}
+
+func main() {
+	flag.Parse()
+
+	if *FlagMarkov {
+		markov()
+		return
 	}
 
 	v := NewVectors("cc.en.300.vec.gz")
