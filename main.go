@@ -19,6 +19,11 @@ import (
 	"strings"
 )
 
+const (
+	// Order is the order of the markov word vector model
+	Order = 2
+)
+
 // Vector is a word vector
 type Vector struct {
 	Word   string
@@ -103,7 +108,7 @@ func (v *Vectors) Entropy(input []string) (ax []float64) {
 }
 
 // Symbols is a set of ordered symbols
-type Symbols [2]uint8
+type Symbols [Order]uint8
 
 // SymbolVectors are markov symbol vectors
 type SymbolVectors map[Symbols][]float64
@@ -129,9 +134,7 @@ func NewSymbolVectors() SymbolVectors {
 		}
 		var symbols Symbols
 		var prefix uint8
-		symbols[1] = data[0]
-		symbols[0] = data[1]
-		for _, symbol := range data[2:] {
+		for _, symbol := range data {
 			vector := vectors[symbols]
 			if vector == nil {
 				vector = make([]float64, 256)
@@ -139,7 +142,11 @@ func NewSymbolVectors() SymbolVectors {
 			vector[prefix]++
 			vector[symbol]++
 			vectors[symbols] = vector
-			prefix, symbols[1], symbols[0] = symbols[1], symbols[0], symbol
+			prefix = symbols[0]
+			for i, value := range symbols[1:] {
+				symbols[i] = value
+			}
+			symbols[Order-1] = symbol
 		}
 
 		for _, vector := range vectors {
@@ -171,9 +178,12 @@ func (v SymbolVectors) Entropy(input []byte) (ax []float64) {
 	width := 256
 	filler := make([]float64, width)
 	length := len(input)
-	weights := NewMatrix(width, length-1)
-	for i := 1; i < length; i++ {
-		symbol := Symbols{input[i], input[i-1]}
+	weights := NewMatrix(width, length-Order+1)
+	for i := 0; i < length-Order+1; i++ {
+		symbol := Symbols{}
+		for j := range symbol {
+			symbol[j] = input[i+j]
+		}
 		vector := v[symbol]
 		if vector == nil {
 			vector = filler
@@ -195,7 +205,7 @@ var (
 
 func markov() {
 	s := NewSymbolVectors()
-	fmt.Println(float64(len(s)) / float64(256*256))
+	fmt.Println(float64(len(s)) / math.Pow(float64(256), Order))
 	input := []byte("1:3 And God said, Let there be light: and there was light")
 	min, symbol := math.MaxFloat64, 0
 	for i := 0; i < 256; i++ {
@@ -208,7 +218,7 @@ func markov() {
 			min, symbol = sum, i
 		}
 	}
-	fmt.Printf("%f %c\n", min, symbol)
+	fmt.Printf("%f '%c' %d\n", min, symbol, symbol)
 }
 
 func main() {
