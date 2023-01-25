@@ -111,45 +111,58 @@ type SymbolVectors map[Symbols][]float64
 // NewSymbolVectors makes new markov symbol vector model
 func NewSymbolVectors() SymbolVectors {
 	vectors := make(SymbolVectors)
-	archive, err := zip.OpenReader("10-0.zip")
-	if err != nil {
-		panic(err)
-	}
-	defer archive.Close()
-	input, err := archive.File[0].Open()
-	if err != nil {
-		panic(err)
-	}
-	defer input.Close()
-	data, err := ioutil.ReadAll(input)
-	if err != nil {
-		panic(err)
-	}
-	var symbols Symbols
-	var prefix uint8
-	symbols[1] = data[0]
-	symbols[0] = data[1]
-	for _, symbol := range data[2:] {
-		vector := vectors[symbols]
-		if vector == nil {
-			vector = make([]float64, 256)
+	learn := func(book string) {
+		archive, err := zip.OpenReader(book)
+		if err != nil {
+			panic(err)
 		}
-		vector[prefix]++
-		vector[symbol]++
-		vectors[symbols] = vector
-		prefix, symbols[1], symbols[0] = symbols[1], symbols[0], symbol
-	}
+		defer archive.Close()
+		fmt.Println("open book", archive.File[0].Name)
+		input, err := archive.File[0].Open()
+		if err != nil {
+			panic(err)
+		}
+		defer input.Close()
+		data, err := ioutil.ReadAll(input)
+		if err != nil {
+			panic(err)
+		}
+		var symbols Symbols
+		var prefix uint8
+		symbols[1] = data[0]
+		symbols[0] = data[1]
+		for _, symbol := range data[2:] {
+			vector := vectors[symbols]
+			if vector == nil {
+				vector = make([]float64, 256)
+			}
+			vector[prefix]++
+			vector[symbol]++
+			vectors[symbols] = vector
+			prefix, symbols[1], symbols[0] = symbols[1], symbols[0], symbol
+		}
 
-	for _, vector := range vectors {
-		sum := 0.0
-		for _, v := range vector {
-			sum += v * v
-		}
-		length := math.Sqrt(sum)
-		for i, v := range vector {
-			vector[i] = v / length
+		for _, vector := range vectors {
+			sum := 0.0
+			for _, v := range vector {
+				sum += v * v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
 		}
 	}
+	learn("books/10-0.zip")
+	learn("books/100-0.zip")
+	learn("books/145-0.zip")
+	learn("books/1513-0.zip")
+	learn("books/16389-0.zip")
+	learn("books/2641-0.zip")
+	learn("books/2701-0.zip")
+	learn("books/37106.zip")
+	learn("books/394-0.zip")
+	learn("books/67979-0.zip")
 	return vectors
 }
 
@@ -182,7 +195,7 @@ var (
 
 func markov() {
 	s := NewSymbolVectors()
-	fmt.Println(len(s))
+	fmt.Println(float64(len(s)) / float64(256*256))
 	input := []byte("1:3 And God said, Let there be light: and there was light")
 	min, symbol := math.MaxFloat64, 0
 	for i := 0; i < 256; i++ {
