@@ -21,7 +21,7 @@ import (
 
 const (
 	// Order is the order of the markov word vector model
-	Order = 2
+	Order = 9
 )
 
 // Vector is a word vector
@@ -139,7 +139,8 @@ func NewSymbolVectors() SymbolVectors {
 			if vector == nil {
 				vector = make([]float64, 256)
 			}
-			vector[prefix]++
+			//vector[prefix]++
+			_ = prefix
 			vector[symbol]++
 			vectors[symbols] = vector
 			prefix = symbols[0]
@@ -207,18 +208,32 @@ func markov() {
 	s := NewSymbolVectors()
 	fmt.Println(float64(len(s)) / math.Pow(float64(256), Order))
 	input := []byte("1:3 And God said, Let there be light: and there was light")
-	min, symbol := math.MaxFloat64, 0
-	for i := 0; i < 256; i++ {
-		entropy := s.Entropy(append(input, byte(i)))
-		sum := 0.0
-		for _, e := range entropy {
-			sum += e
+	var search func(depth int, input []byte) (entropy float64, output []byte)
+	search = func(depth int, input []byte) (entropy float64, output []byte) {
+		if depth == 0 {
+			ent := s.Entropy(input)
+			for _, value := range ent {
+				entropy += value
+			}
+			return entropy, input
 		}
-		if sum < min {
-			min, symbol = sum, i
+		min, s := math.MaxFloat64, []byte{}
+		for i := 0; i < 256; i++ {
+			n := make([]byte, len(input))
+			copy(n, input)
+			e, o := search(depth-1, append(n, byte(i)))
+			if e < min {
+				min, s = e, o
+			}
 		}
+		return min, s
 	}
-	fmt.Printf("%f '%c' %d\n", min, symbol, symbol)
+	entropy, output := search(2, input)
+	fmt.Println(entropy, string(output))
+	for i := 0; i < 32; i++ {
+		entropy, output = search(2, output)
+		fmt.Println(entropy, string(output))
+	}
 }
 
 func main() {
