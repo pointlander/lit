@@ -134,7 +134,7 @@ func NewSymbolVectors() SymbolVectors {
 		}
 		var symbols Symbols
 		var prefix uint8
-		for _, symbol := range data {
+		for i, symbol := range data[:len(data)-Order+1] {
 			vector := vectors[symbols]
 			if vector == nil {
 				vector = make([]float64, 256)
@@ -142,6 +142,9 @@ func NewSymbolVectors() SymbolVectors {
 			//vector[prefix]++
 			_ = prefix
 			vector[symbol]++
+			for j := 1; j < Order; j++ {
+				vector[data[i+j]]++
+			}
 			vectors[symbols] = vector
 			prefix = symbols[0]
 			for i, value := range symbols[1:] {
@@ -228,11 +231,13 @@ func markov() {
 		}
 		return min, s
 	}
-	entropy, output := search(2, input)
+	entropy, output := search(1, input)
 	fmt.Println(entropy, string(output))
-	for i := 0; i < 32; i++ {
-		entropy, output = search(2, output)
+	fmt.Printf("\n")
+	for i := 0; i < 128; i++ {
+		entropy, output = search(1, output)
 		fmt.Println(entropy, string(output))
+		fmt.Printf("\n")
 	}
 }
 
