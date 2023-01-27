@@ -8,6 +8,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"compress/gzip"
+	"encoding/gob"
 	"flag"
 	"fmt"
 	"io"
@@ -205,12 +206,30 @@ func (v SymbolVectors) Entropy(input []byte) (ax []float64) {
 var (
 	// FlagMarkov mode use markov symbol vectors
 	FlagMarkov = flag.Bool("markov", false, "markov symbol vector mode")
+	// FlagLearn learn a model
+	FlagLearn = flag.Bool("learn", false, "learns a model")
 )
 
 func markov() {
-	s := NewSymbolVectors()
+	var s SymbolVectors
+	input, err := os.Open("model.bin")
+	if err != nil {
+		panic(err)
+	}
+	defer input.Close()
+	decompressor, err := gzip.NewReader(input)
+	if err != nil {
+		panic(err)
+	}
+	defer decompressor.Close()
+	decoder := gob.NewDecoder(decompressor)
+	err = decoder.Decode(&s)
+	if err != nil {
+		panic(err)
+	}
+
 	fmt.Println(float64(len(s)) / math.Pow(float64(256), Order))
-	input := []byte("1:3 And God said, Let there be light: and there was light")
+	in := []byte("1:3 And God said, Let there be light: and there was light")
 	var search func(depth int, input []byte) (entropy float64, output []byte)
 	search = func(depth int, input []byte) (entropy float64, output []byte) {
 		if depth == 0 {
@@ -231,7 +250,7 @@ func markov() {
 		}
 		return min, s
 	}
-	entropy, output := search(1, input)
+	entropy, output := search(1, in)
 	fmt.Println(entropy, string(output))
 	fmt.Printf("\n")
 	for i := 0; i < 128; i++ {
@@ -246,6 +265,22 @@ func main() {
 
 	if *FlagMarkov {
 		markov()
+		return
+	}
+
+	if *FlagLearn {
+		s := NewSymbolVectors()
+		output, err := os.Create("model.bin")
+		if err != nil {
+			panic(err)
+		}
+		compressor := gzip.NewWriter(output)
+		defer compressor.Close()
+		encoder := gob.NewEncoder(compressor)
+		err = encoder.Encode(s)
+		if err != nil {
+			panic(err)
+		}
 		return
 	}
 
