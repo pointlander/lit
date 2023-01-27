@@ -26,7 +26,7 @@ import (
 
 const (
 	// Order is the order of the markov word vector model
-	Order = 4
+	Order = 5
 )
 
 // Vector is a word vector
