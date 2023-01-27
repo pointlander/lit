@@ -229,7 +229,8 @@ func markov() {
 	}
 
 	fmt.Println(float64(len(s)) / math.Pow(float64(256), Order))
-	in := []byte("1:3 And God said, Let there be light: and there was light")
+	//in := []byte("1:3 And God said, Let there be light: and there was light")
+	in := []byte("What color is the sky?")
 	var search func(depth int, input []byte) (entropy float64, output []byte)
 	search = func(depth int, input []byte) (entropy float64, output []byte) {
 		if depth == 0 {
@@ -250,11 +251,11 @@ func markov() {
 		}
 		return min, s
 	}
-	entropy, output := search(1, in)
+	entropy, output := search(2, in)
 	fmt.Println(entropy, string(output))
 	fmt.Printf("\n")
 	for i := 0; i < 128; i++ {
-		entropy, output = search(1, output)
+		entropy, output = search(2, output)
 		fmt.Println(entropy, string(output))
 		fmt.Printf("\n")
 	}
