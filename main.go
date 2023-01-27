@@ -15,14 +15,18 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+
+	zim "github.com/akhenakh/gozim"
+	"github.com/k3a/html2text"
 )
 
 const (
 	// Order is the order of the markov word vector model
-	Order = 9
+	Order = 4
 )
 
 // Vector is a word vector
@@ -112,12 +116,34 @@ func (v *Vectors) Entropy(input []string) (ax []float64) {
 type Symbols [Order]uint8
 
 // SymbolVectors are markov symbol vectors
-type SymbolVectors map[Symbols][]float64
+type SymbolVectors map[Symbols]*[256]float32
 
 // NewSymbolVectors makes new markov symbol vector model
 func NewSymbolVectors() SymbolVectors {
 	vectors := make(SymbolVectors)
-	learn := func(book string) {
+	learn := func(data []byte) {
+		var symbols Symbols
+		var prefix uint8
+		for i, symbol := range data[:len(data)-Order+1] {
+			vector := vectors[symbols]
+			if vector == nil {
+				vector = &[256]float32{}
+			}
+			//vector[prefix]++
+			_ = prefix
+			vector[symbol]++
+			for j := 1; j < Order; j++ {
+				vector[data[i+j]]++
+			}
+			vectors[symbols] = vector
+			prefix = symbols[0]
+			for i, value := range symbols[1:] {
+				symbols[i] = value
+			}
+			symbols[Order-1] = symbol
+		}
+	}
+	load := func(book string) {
 		archive, err := zip.OpenReader(book)
 		if err != nil {
 			panic(err)
@@ -133,55 +159,54 @@ func NewSymbolVectors() SymbolVectors {
 		if err != nil {
 			panic(err)
 		}
-		var symbols Symbols
-		var prefix uint8
-		for i, symbol := range data[:len(data)-Order+1] {
-			vector := vectors[symbols]
-			if vector == nil {
-				vector = make([]float64, 256)
+		learn(data)
+	}
+	reader, err := zim.NewReader("/home/andrew/Downloads/gutenberg_en_all_2022-04.zim", false)
+	if err != nil {
+		panic(err)
+	}
+	var m runtime.MemStats
+	articles := reader.ListArticles()
+	for article := range articles {
+		url := article.FullURL()
+		if strings.HasSuffix(url, ".html") {
+			html, err := article.Data()
+			if err != nil {
+				panic(err)
 			}
-			//vector[prefix]++
-			_ = prefix
-			vector[symbol]++
-			for j := 1; j < Order; j++ {
-				vector[data[i+j]]++
-			}
-			vectors[symbols] = vector
-			prefix = symbols[0]
-			for i, value := range symbols[1:] {
-				symbols[i] = value
-			}
-			symbols[Order-1] = symbol
-		}
-
-		for _, vector := range vectors {
-			sum := 0.0
-			for _, v := range vector {
-				sum += v * v
-			}
-			length := math.Sqrt(sum)
-			for i, v := range vector {
-				vector[i] = v / length
-			}
+			plain := html2text.HTML2Text(string(html))
+			runtime.ReadMemStats(&m)
+			fmt.Println(url, "Alloc", m.Alloc/(1024*1024))
+			learn([]byte(plain))
 		}
 	}
-	learn("books/10-0.zip")
-	learn("books/100-0.zip")
-	learn("books/145-0.zip")
-	learn("books/1513-0.zip")
-	learn("books/16389-0.zip")
-	learn("books/2641-0.zip")
-	learn("books/2701-0.zip")
-	learn("books/37106.zip")
-	learn("books/394-0.zip")
-	learn("books/67979-0.zip")
+	load("books/10-0.zip")
+	load("books/100-0.zip")
+	load("books/145-0.zip")
+	load("books/1513-0.zip")
+	load("books/16389-0.zip")
+	load("books/2641-0.zip")
+	load("books/2701-0.zip")
+	load("books/37106.zip")
+	load("books/394-0.zip")
+	load("books/67979-0.zip")
+	for _, vector := range vectors {
+		sum := float32(0.0)
+		for _, v := range vector {
+			sum += v * v
+		}
+		length := float32(math.Sqrt(float64(sum)))
+		for i, v := range vector {
+			vector[i] = v / length
+		}
+	}
 	return vectors
 }
 
 // Entropy calculates entropy
 func (v SymbolVectors) Entropy(input []byte) (ax []float64) {
 	width := 256
-	filler := make([]float64, width)
+	filler := [256]float32{}
 	length := len(input)
 	weights := NewMatrix(width, length-Order+1)
 	for i := 0; i < length-Order+1; i++ {
@@ -191,9 +216,11 @@ func (v SymbolVectors) Entropy(input []byte) (ax []float64) {
 		}
 		vector := v[symbol]
 		if vector == nil {
-			vector = filler
+			vector = &filler
 		}
-		weights.Data = append(weights.Data, vector...)
+		for _, value := range vector {
+			weights.Data = append(weights.Data, float64(value))
+		}
 	}
 
 	l1 := Softmax(Mul(weights, weights))
