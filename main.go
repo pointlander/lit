@@ -5,14 +5,12 @@
 package main
 
 import (
-	"archive/zip"
 	"bufio"
 	"compress/gzip"
 	"encoding/gob"
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"os"
 	"runtime"
@@ -26,7 +24,7 @@ import (
 
 const (
 	// Order is the order of the markov word vector model
-	Order = 5
+	Order = 7
 )
 
 // Vector is a word vector
@@ -116,7 +114,7 @@ func (v *Vectors) Entropy(input []string) (ax []float64) {
 type Symbols [Order]uint8
 
 // SymbolVectors are markov symbol vectors
-type SymbolVectors map[Symbols]*[256]float32
+type SymbolVectors map[Symbols]map[byte]uint16
 
 // NewSymbolVectors makes new markov symbol vector model
 func NewSymbolVectors() SymbolVectors {
@@ -127,13 +125,15 @@ func NewSymbolVectors() SymbolVectors {
 		for i, symbol := range data[:len(data)-Order+1] {
 			vector := vectors[symbols]
 			if vector == nil {
-				vector = &[256]float32{}
+				vector = make(map[byte]uint16, 1)
 			}
 			//vector[prefix]++
 			_ = prefix
 			vector[symbol]++
 			for j := 1; j < Order; j++ {
-				vector[data[i+j]]++
+				if vector[data[i+j]] < math.MaxUint16 {
+					vector[data[i+j]]++
+				}
 			}
 			vectors[symbols] = vector
 			prefix = symbols[0]
@@ -143,7 +143,7 @@ func NewSymbolVectors() SymbolVectors {
 			symbols[Order-1] = symbol
 		}
 	}
-	load := func(book string) {
+	/*load := func(book string) {
 		archive, err := zip.OpenReader(book)
 		if err != nil {
 			panic(err)
@@ -160,13 +160,13 @@ func NewSymbolVectors() SymbolVectors {
 			panic(err)
 		}
 		learn(data)
-	}
+	}*/
 	reader, err := zim.NewReader("/home/andrew/Downloads/gutenberg_en_all_2022-04.zim", false)
 	if err != nil {
 		panic(err)
 	}
 	var m runtime.MemStats
-	articles := reader.ListArticles()
+	skip, i, articles := 0, 0, reader.ListArticles()
 	for article := range articles {
 		url := article.FullURL()
 		if strings.HasSuffix(url, ".html") {
@@ -176,11 +176,18 @@ func NewSymbolVectors() SymbolVectors {
 			}
 			plain := html2text.HTML2Text(string(html))
 			runtime.ReadMemStats(&m)
-			fmt.Println(url, "Alloc", m.Alloc/(1024*1024))
+			fmt.Printf("%5d %20d %s\n", m.Alloc/(1024*1024), len(vectors), url)
 			learn([]byte(plain))
+			if i%100 == 0 {
+				runtime.GC()
+			}
+			i++
+		} else {
+			fmt.Println("skip", skip)
+			skip++
 		}
 	}
-	load("books/10-0.zip")
+	/*load("books/10-0.zip")
 	load("books/100-0.zip")
 	load("books/145-0.zip")
 	load("books/1513-0.zip")
@@ -189,24 +196,15 @@ func NewSymbolVectors() SymbolVectors {
 	load("books/2701-0.zip")
 	load("books/37106.zip")
 	load("books/394-0.zip")
-	load("books/67979-0.zip")
-	for _, vector := range vectors {
-		sum := float32(0.0)
-		for _, v := range vector {
-			sum += v * v
-		}
-		length := float32(math.Sqrt(float64(sum)))
-		for i, v := range vector {
-			vector[i] = v / length
-		}
-	}
+	load("books/67979-0.zip")*/
+	fmt.Println("done")
 	return vectors
 }
 
 // Entropy calculates entropy
 func (v SymbolVectors) Entropy(input []byte) (ax []float64) {
 	width := 256
-	filler := [256]float32{}
+	vector := make([]float64, 256)
 	length := len(input)
 	weights := NewMatrix(width, length-Order+1)
 	for i := 0; i < length-Order+1; i++ {
@@ -214,12 +212,29 @@ func (v SymbolVectors) Entropy(input []byte) (ax []float64) {
 		for j := range symbol {
 			symbol[j] = input[i+j]
 		}
-		vector := v[symbol]
-		if vector == nil {
-			vector = &filler
-		}
-		for _, value := range vector {
-			weights.Data = append(weights.Data, float64(value))
+		hash := v[symbol]
+		if hash == nil {
+			for j := 0; j < 256; j++ {
+				weights.Data = append(weights.Data, 0)
+			}
+		} else {
+			for i := range vector {
+				vector[i] = 0
+			}
+			sum := float64(0.0)
+			for key, value := range hash {
+				if value == math.MaxUint16 {
+					fmt.Println("max value")
+				}
+				v := float64(value)
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			weights.Data = append(weights.Data, vector...)
 		}
 	}
 
@@ -298,6 +313,7 @@ func main() {
 
 	if *FlagLearn {
 		s := NewSymbolVectors()
+		fmt.Println("done building")
 		output, err := os.Create("model.bin")
 		if err != nil {
 			panic(err)
@@ -305,10 +321,12 @@ func main() {
 		compressor := gzip.NewWriter(output)
 		defer compressor.Close()
 		encoder := gob.NewEncoder(compressor)
+		fmt.Println("write file")
 		err = encoder.Encode(s)
 		if err != nil {
 			panic(err)
 		}
+		fmt.Println("done writing file")
 		return
 	}
 
