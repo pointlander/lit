@@ -334,34 +334,51 @@ func markov() {
 	}
 
 	fmt.Println(float64(len(s)) / math.Pow(float64(256), Order))
-	//in := []byte("1:3 And God said, Let there be light: and there was light")
 	in := []byte("What color is the sky?")
-	var search func(depth int, input []byte) (entropy float64, output []byte)
-	search = func(depth int, input []byte) (entropy float64, output []byte) {
+	type Result struct {
+		Entropy float64
+		Output  []byte
+	}
+	var search func(depth int, input []byte, done chan Result)
+	search = func(depth int, input []byte, done chan Result) {
 		if depth == 0 {
-			ent := s.Entropy(input)
-			for _, value := range ent {
-				entropy += value
+			total := 0.0
+			entropy := s.Entropy(input)
+			for _, value := range entropy {
+				total += value
 			}
-			return entropy, input
+			done <- Result{
+				Entropy: total,
+				Output:  input,
+			}
+			return
 		}
-		min, s := math.MaxFloat64, []byte{}
+		min, output, next := math.MaxFloat64, []byte{}, make(chan Result, 8)
 		for i := 0; i < 256; i++ {
 			n := make([]byte, len(input))
 			copy(n, input)
-			e, o := search(depth-1, append(n, byte(i)))
-			if e < min {
-				min, s = e, o
+			go search(depth-1, append(n, byte(i)), next)
+		}
+		for i := 0; i < 256; i++ {
+			result := <-next
+			if result.Entropy < min {
+				min, output = result.Entropy, result.Output
 			}
 		}
-		return min, s
+		done <- Result{
+			Entropy: min,
+			Output:  output,
+		}
 	}
-	entropy, output := search(2, in)
-	fmt.Println(entropy, string(output))
+	done := make(chan Result, 8)
+	go search(2, in, done)
+	result := <-done
+	fmt.Println(result.Entropy, string(result.Output))
 	fmt.Printf("\n")
 	for i := 0; i < 128; i++ {
-		entropy, output = search(2, output)
-		fmt.Println(entropy, string(output))
+		search(2, result.Output, done)
+		result = <-done
+		fmt.Println(result.Entropy, string(result.Output))
 		fmt.Printf("\n")
 	}
 }
