@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"os"
 	"runtime"
 	"sort"
@@ -24,7 +25,7 @@ import (
 
 const (
 	// Order is the order of the markov word vector model
-	Order = 7
+	Order = 9
 )
 
 // Vector is a word vector
@@ -201,6 +202,68 @@ func NewSymbolVectors() SymbolVectors {
 	return vectors
 }
 
+// NewSymbolVectorsRandom makes new markov symbol vector model
+func NewSymbolVectorsRandom() SymbolVectors {
+	rnd := rand.New(rand.NewSource(1))
+	vectors := make(SymbolVectors)
+	learn := func(data []byte) {
+		var symbols Symbols
+		for i, symbol := range data[:len(data)-Order+1] {
+			vector := vectors[symbols]
+			if vector == nil {
+				vector = make(map[byte]uint16, 1)
+			}
+			vector[symbol]++
+			for j := 1; j < Order; j++ {
+				if vector[data[i+j]] < math.MaxUint16 {
+					vector[data[i+j]]++
+				}
+			}
+			vectors[symbols] = vector
+			for i, value := range symbols[1:] {
+				symbols[i] = value
+			}
+			symbols[Order-1] = symbol
+		}
+	}
+	reader, err := zim.NewReader("/home/andrew/Downloads/gutenberg_en_all_2022-04.zim", false)
+	if err != nil {
+		panic(err)
+	}
+	var m runtime.MemStats
+	i, length := 0, reader.ArticleCount
+	for {
+		index := rnd.Intn(int(length))
+		if index == 0 {
+			continue
+		}
+		article, err := reader.ArticleAtURLIdx(uint32(index))
+		if err != nil {
+			continue
+		}
+		url := article.FullURL()
+		if strings.HasSuffix(url, ".html") {
+			html, err := article.Data()
+			if err != nil {
+				panic(err)
+			}
+			plain := html2text.HTML2Text(string(html))
+			runtime.ReadMemStats(&m)
+			fmt.Printf("%5d %20d %s\n", m.Alloc/(1024*1024), len(vectors), url)
+			learn([]byte(plain))
+			if i%100 == 0 {
+				runtime.GC()
+			}
+			if i == 8*1024 {
+				break
+			}
+			i++
+		}
+	}
+	fmt.Println("done")
+	return vectors
+}
+
 // Entropy calculates entropy
 func (v SymbolVectors) Entropy(input []byte) (ax []float64) {
 	width := 256
@@ -312,7 +375,7 @@ func main() {
 	}
 
 	if *FlagLearn {
-		s := NewSymbolVectors()
+		s := NewSymbolVectorsRandom()
 		fmt.Println("done building")
 		output, err := os.Create("model.bin")
 		if err != nil {
