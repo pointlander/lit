@@ -159,6 +159,27 @@ func Softmax(m Matrix) Matrix {
 	return o
 }
 
+// Normalize normalizes a matrix to the unit vector
+func Normalize(m Matrix) Matrix {
+	size, width := len(m.Data), m.Cols
+	o := Matrix{
+		Cols: m.Cols,
+		Rows: m.Rows,
+		Data: make([]float64, 0, m.Cols*m.Rows),
+	}
+	for i := 0; i < size; i += width {
+		sum := 0.0
+		for _, ax := range m.Data[i : i+width] {
+			sum += ax * ax
+		}
+		length := math.Sqrt(sum)
+		for _, ax := range m.Data[i : i+width] {
+			o.Data = append(o.Data, ax/length)
+		}
+	}
+	return o
+}
+
 // Entropy is the entropy of the matrix
 func Entropy(m Matrix) Matrix {
 	size, width := len(m.Data), m.Cols

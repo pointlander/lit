@@ -266,6 +266,7 @@ func NewSymbolVectorsRandom() SymbolVectors {
 
 // Entropy calculates entropy
 func (v SymbolVectors) Entropy(input []byte) (ax []float64) {
+	rnd := rand.New(rand.NewSource(1))
 	width := 256
 	vector := make([]float64, 256)
 	length := len(input)
@@ -301,7 +302,8 @@ func (v SymbolVectors) Entropy(input []byte) (ax []float64) {
 		}
 	}
 
-	l1 := Softmax(Mul(weights, weights))
+	projection := NewRandMatrix(rnd, 256, 256)
+	l1 := Softmax(Mul(Normalize(Mul(projection, weights)), weights))
 	l2 := Softmax(Mul(T(weights), l1))
 	entropy := Entropy(l2)
 
