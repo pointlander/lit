@@ -173,6 +173,9 @@ func Normalize(m Matrix) Matrix {
 			sum += ax * ax
 		}
 		length := math.Sqrt(sum)
+		if sum == 0 {
+			length = 1
+		}
 		for _, ax := range m.Data[i : i+width] {
 			o.Data = append(o.Data, ax/length)
 		}

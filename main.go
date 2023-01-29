@@ -336,7 +336,8 @@ func markov() {
 	}
 
 	fmt.Println(float64(len(s)) / math.Pow(float64(256), Order))
-	in := []byte("What color is the sky?")
+	//in := []byte("What color is the sky?")
+	in := []byte("Is the sky blue?")
 	type Result struct {
 		Entropy float64
 		Output  []byte
@@ -359,7 +360,8 @@ func markov() {
 		for i := 0; i < 256; i++ {
 			n := make([]byte, len(input))
 			copy(n, input)
-			go search(depth-1, append(n, byte(i)), next)
+			n = append(n, byte(i))
+			go search(depth-1, n, next)
 		}
 		for i := 0; i < 256; i++ {
 			result := <-next
