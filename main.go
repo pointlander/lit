@@ -6,8 +6,8 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
-	"encoding/gob"
 	"flag"
 	"fmt"
 	"io"
@@ -19,8 +19,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pointlander/compress"
+
 	zim "github.com/akhenakh/gozim"
 	"github.com/k3a/html2text"
+	bolt "go.etcd.io/bbolt"
 )
 
 const (
@@ -264,8 +267,8 @@ func NewSymbolVectorsRandom() SymbolVectors {
 	return vectors
 }
 
-// Entropy calculates entropy
-func (v SymbolVectors) Entropy(input []byte) (ax []float64) {
+// SelfEntropy calculates entropy
+func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 	rnd := rand.New(rand.NewSource(1))
 	width := 256
 	vector := make([]float64, 256)
@@ -276,17 +279,31 @@ func (v SymbolVectors) Entropy(input []byte) (ax []float64) {
 		for j := range symbol {
 			symbol[j] = input[i+j]
 		}
-		hash := v[symbol]
-		if hash == nil {
+		var decoded [256]uint16
+		found := false
+		db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("markov"))
+			v := b.Get(symbol[:])
+			if v != nil {
+				found = true
+				index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 512)
+				compress.Mark1Decompress1(buffer, output)
+				for key := range decoded {
+					decoded[key] = uint16(output[index])
+					index++
+					decoded[key] |= uint16(output[index]) << 8
+					index++
+				}
+			}
+			return nil
+		})
+		if !found {
 			for j := 0; j < 256; j++ {
 				weights.Data = append(weights.Data, 0)
 			}
 		} else {
-			for i := range vector {
-				vector[i] = 0
-			}
 			sum := float64(0.0)
-			for key, value := range hash {
+			for key, value := range decoded {
 				if value == math.MaxUint16 {
 					fmt.Println("max value")
 				}
@@ -318,26 +335,14 @@ var (
 )
 
 func markov() {
-	var s SymbolVectors
-	input, err := os.Open("model.bin")
+	db, err := bolt.Open("model.bolt", 0600, nil)
 	if err != nil {
 		panic(err)
 	}
-	defer input.Close()
-	decompressor, err := gzip.NewReader(input)
-	if err != nil {
-		panic(err)
-	}
-	defer decompressor.Close()
-	decoder := gob.NewDecoder(decompressor)
-	err = decoder.Decode(&s)
-	if err != nil {
-		panic(err)
-	}
+	defer db.Close()
 
-	fmt.Println(float64(len(s)) / math.Pow(float64(256), Order))
-	//in := []byte("What color is the sky?")
-	in := []byte("Is the sky blue?")
+	in := []byte("What color is the sky?")
+	//in := []byte("Is the sky blue?")
 	type Result struct {
 		Entropy float64
 		Output  []byte
@@ -346,7 +351,7 @@ func markov() {
 	search = func(depth int, input []byte, done chan Result) {
 		if depth == 0 {
 			total := 0.0
-			entropy := s.Entropy(input)
+			entropy := SelfEntropy(db, input)
 			for _, value := range entropy {
 				total += value
 			}
@@ -398,17 +403,72 @@ func main() {
 	if *FlagLearn {
 		s := NewSymbolVectorsRandom()
 		fmt.Println("done building")
-		output, err := os.Create("model.bin")
+		db, err := bolt.Open("model.bolt", 0666, nil)
 		if err != nil {
 			panic(err)
 		}
-		compressor := gzip.NewWriter(output)
-		defer compressor.Close()
-		encoder := gob.NewEncoder(compressor)
+		defer db.Close()
+		db.Update(func(tx *bolt.Tx) error {
+			_, err := tx.CreateBucket([]byte("markov"))
+			if err != nil {
+				panic(err)
+			}
+			return nil
+		})
 		fmt.Println("write file")
-		err = encoder.Encode(s)
-		if err != nil {
-			panic(err)
+		type Pair struct {
+			Key   []byte
+			Value []byte
+		}
+		count, i, pairs := 0, 0, [1024]Pair{}
+		for key, value := range s {
+			k := make([]byte, len(key))
+			copy(k, key[:])
+			pairs[i].Key = k
+			v := make([]uint16, 256)
+			for key, value := range value {
+				v[key] = value
+			}
+			index, data := 0, make([]byte, 512)
+			for _, value := range v {
+				data[index] = byte(value & 0xff)
+				index++
+				data[index] = byte((value >> 8) & 0xff)
+				index++
+			}
+			pairs[i].Value = data
+			i++
+			count++
+			if i == len(pairs) {
+				db.Update(func(tx *bolt.Tx) error {
+					b := tx.Bucket([]byte("markov"))
+					for _, pair := range pairs {
+						buffer := bytes.Buffer{}
+						compress.Mark1Compress1(pair.Value, &buffer)
+						err := b.Put(pair.Key, buffer.Bytes())
+						if err != nil {
+							return err
+						}
+					}
+					return nil
+				})
+				i = 0
+				fmt.Printf("%f\n", float64(count)/float64(len(s)))
+			}
+		}
+		if i > 0 {
+			db.Update(func(tx *bolt.Tx) error {
+				b := tx.Bucket([]byte("markov"))
+				for _, pair := range pairs[:i] {
+					buffer := bytes.Buffer{}
+					compress.Mark1Compress1(pair.Value, &buffer)
+					err := b.Put(pair.Key, buffer.Bytes())
+					if err != nil {
+						return err
+					}
+				}
+				return nil
+			})
 		}
 		fmt.Println("done writing file")
 		return
