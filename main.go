@@ -420,7 +420,7 @@ func main() {
 			Key   []byte
 			Value []byte
 		}
-		count, i, pairs := 0, 0, [1024]Pair{}
+		length, count, i, pairs := len(s), 0, 0, [1024]Pair{}
 		for key, value := range s {
 			k := make([]byte, len(key))
 			copy(k, key[:])
@@ -437,6 +437,7 @@ func main() {
 				index++
 			}
 			pairs[i].Value = data
+			delete(s, key)
 			i++
 			count++
 			if i == len(pairs) {
@@ -453,7 +454,7 @@ func main() {
 					return nil
 				})
 				i = 0
-				fmt.Printf("%f\n", float64(count)/float64(len(s)))
+				fmt.Printf("%f\n", float64(count)/float64(length))
 			}
 		}
 		if i > 0 {
