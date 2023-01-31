@@ -123,54 +123,12 @@ type SymbolVectors map[Symbols]map[byte]uint16
 // NewSymbolVectors makes new markov symbol vector model
 func NewSymbolVectors() SymbolVectors {
 	vectors := make(SymbolVectors)
-	learn := func(data []byte) {
-		var symbols Symbols
-		var prefix uint8
-		for i, symbol := range data[:len(data)-Order+1] {
-			vector := vectors[symbols]
-			if vector == nil {
-				vector = make(map[byte]uint16, 1)
-			}
-			//vector[prefix]++
-			_ = prefix
-			vector[symbol]++
-			for j := 1; j < Order; j++ {
-				if vector[data[i+j]] < math.MaxUint16 {
-					vector[data[i+j]]++
-				}
-			}
-			vectors[symbols] = vector
-			prefix = symbols[0]
-			for i, value := range symbols[1:] {
-				symbols[i] = value
-			}
-			symbols[Order-1] = symbol
-		}
-	}
-	/*load := func(book string) {
-		archive, err := zip.OpenReader(book)
-		if err != nil {
-			panic(err)
-		}
-		defer archive.Close()
-		fmt.Println("open book", archive.File[0].Name)
-		input, err := archive.File[0].Open()
-		if err != nil {
-			panic(err)
-		}
-		defer input.Close()
-		data, err := ioutil.ReadAll(input)
-		if err != nil {
-			panic(err)
-		}
-		learn(data)
-	}*/
 	reader, err := zim.NewReader("/home/andrew/Downloads/gutenberg_en_all_2022-04.zim", false)
 	if err != nil {
 		panic(err)
 	}
 	var m runtime.MemStats
-	skip, i, articles := 0, 0, reader.ListArticles()
+	i, articles := 0, reader.ListArticles()
 	for article := range articles {
 		url := article.FullURL()
 		if strings.HasSuffix(url, ".html") {
@@ -181,26 +139,13 @@ func NewSymbolVectors() SymbolVectors {
 			plain := html2text.HTML2Text(string(html))
 			runtime.ReadMemStats(&m)
 			fmt.Printf("%5d %20d %s\n", m.Alloc/(1024*1024), len(vectors), url)
-			learn([]byte(plain))
+			vectors.Learn([]byte(plain))
 			if i%100 == 0 {
 				runtime.GC()
 			}
 			i++
-		} else {
-			fmt.Println("skip", skip)
-			skip++
 		}
 	}
-	/*load("books/10-0.zip")
-	load("books/100-0.zip")
-	load("books/145-0.zip")
-	load("books/1513-0.zip")
-	load("books/16389-0.zip")
-	load("books/2641-0.zip")
-	load("books/2701-0.zip")
-	load("books/37106.zip")
-	load("books/394-0.zip")
-	load("books/67979-0.zip")*/
 	fmt.Println("done")
 	return vectors
 }
@@ -209,26 +154,6 @@ func NewSymbolVectors() SymbolVectors {
 func NewSymbolVectorsRandom() SymbolVectors {
 	rnd := rand.New(rand.NewSource(1))
 	vectors := make(SymbolVectors)
-	learn := func(data []byte) {
-		var symbols Symbols
-		for i, symbol := range data[:len(data)-Order+1] {
-			vector := vectors[symbols]
-			if vector == nil {
-				vector = make(map[byte]uint16, 1)
-			}
-			vector[symbol]++
-			for j := 1; j < Order; j++ {
-				if vector[data[i+j]] < math.MaxUint16 {
-					vector[data[i+j]]++
-				}
-			}
-			vectors[symbols] = vector
-			for i, value := range symbols[1:] {
-				symbols[i] = value
-			}
-			symbols[Order-1] = symbol
-		}
-	}
 	reader, err := zim.NewReader("/home/andrew/Downloads/gutenberg_en_all_2022-04.zim", false)
 	if err != nil {
 		panic(err)
@@ -253,7 +178,7 @@ func NewSymbolVectorsRandom() SymbolVectors {
 			plain := html2text.HTML2Text(string(html))
 			runtime.ReadMemStats(&m)
 			fmt.Printf("%5d %20d %s\n", m.Alloc/(1024*1024), len(vectors), url)
-			learn([]byte(plain))
+			vectors.Learn([]byte(plain))
 			if i%100 == 0 {
 				runtime.GC()
 			}
@@ -265,6 +190,28 @@ func NewSymbolVectorsRandom() SymbolVectors {
 	}
 	fmt.Println("done")
 	return vectors
+}
+
+// Learn learns a markov model from data
+func (s SymbolVectors) Learn(data []byte) {
+	var symbols Symbols
+	for i, symbol := range data[:len(data)-Order+1] {
+		vector := s[symbols]
+		if vector == nil {
+			vector = make(map[byte]uint16, 1)
+		}
+		vector[symbol]++
+		for j := 1; j < Order; j++ {
+			if vector[data[i+j]] < math.MaxUint16 {
+				vector[data[i+j]]++
+			}
+		}
+		s[symbols] = vector
+		for i, value := range symbols[1:] {
+			symbols[i] = value
+		}
+		symbols[Order-1] = symbol
+	}
 }
 
 // SelfEntropy calculates entropy
@@ -332,6 +279,8 @@ var (
 	FlagMarkov = flag.Bool("markov", false, "markov symbol vector mode")
 	// FlagLearn learn a model
 	FlagLearn = flag.Bool("learn", false, "learns a model")
+	// FlagRanom select random books from gutenberg for training
+	FlagRandom = flag.Bool("random", false, "use random books from gutenberg")
 )
 
 func markov() {
@@ -401,7 +350,13 @@ func main() {
 	}
 
 	if *FlagLearn {
-		s := NewSymbolVectorsRandom()
+		var s SymbolVectors
+		if *FlagRandom {
+			s = NewSymbolVectorsRandom()
+		} else {
+			s = NewSymbolVectors()
+		}
+
 		fmt.Println("done building")
 		db, err := bolt.Open("model.bolt", 0666, nil)
 		if err != nil {
