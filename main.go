@@ -200,7 +200,9 @@ func (s SymbolVectors) Learn(data []byte) {
 		if vector == nil {
 			vector = make(map[byte]uint16, 1)
 		}
-		vector[symbol]++
+		if vector[symbol] < math.MaxUint16 {
+			vector[symbol]++
+		}
 		for j := 1; j < Order; j++ {
 			if vector[data[i+j]] < math.MaxUint16 {
 				vector[data[i+j]]++
