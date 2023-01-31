@@ -182,7 +182,7 @@ func NewSymbolVectorsRandom() SymbolVectors {
 			if i%100 == 0 {
 				runtime.GC()
 			}
-			if i == 8*1024 {
+			if i == *FlagScale*1024 {
 				break
 			}
 			i++
@@ -283,6 +283,8 @@ var (
 	FlagLearn = flag.Bool("learn", false, "learns a model")
 	// FlagRanom select random books from gutenberg for training
 	FlagRandom = flag.Bool("random", false, "use random books from gutenberg")
+	// FlagScale the scaling factor for the amount of samples
+	FlagScale = flag.Int("scale", 8, "the scaling factor for the amount of samples")
 )
 
 func markov() {
