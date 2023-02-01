@@ -29,6 +29,8 @@ import (
 const (
 	// Order is the order of the markov word vector model
 	Order = 9
+	// Depth is the depth of the search
+	Depth = 2
 )
 
 // Vector is a word vector
@@ -395,12 +397,12 @@ func markov() {
 		}
 	}
 	done := make(chan Result, 8)
-	go search(2, in, done)
+	go search(Depth, in, done)
 	result := <-done
 	fmt.Println(result.Entropy, string(result.Output))
 	fmt.Printf("\n")
 	for i := 0; i < 128; i++ {
-		search(2, result.Output, done)
+		search(Depth, result.Output, done)
 		result = <-done
 		fmt.Println(result.Entropy, string(result.Output))
 		fmt.Printf("\n")
