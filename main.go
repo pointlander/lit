@@ -287,6 +287,56 @@ var (
 	FlagScale = flag.Int("scale", 8, "the scaling factor for the amount of samples")
 )
 
+type Result struct {
+	Entropy float64
+	Output  []byte
+}
+
+func split(pathes []Result) int {
+	sum := 0.0
+	for _, e := range pathes {
+		sum += e.Entropy
+	}
+	avg, vari := sum/float64(len(pathes)), 0.0
+	for _, e := range pathes {
+		difference := e.Entropy - avg
+		vari += difference * difference
+	}
+	vari /= float64(len(pathes))
+
+	index, max := 0, 0.0
+	for i := 1; i < len(pathes); i++ {
+		suma, counta := 0.0, 0.0
+		for _, e := range pathes[:i] {
+			suma += e.Entropy
+			counta++
+		}
+		avga, varia := suma/counta, 0.0
+		for _, e := range pathes[:i] {
+			difference := e.Entropy - avga
+			varia += difference * difference
+		}
+		varia /= counta
+
+		sumb, countb := 0.0, 0.0
+		for _, e := range pathes[i:] {
+			sumb += e.Entropy
+			countb++
+		}
+		avgb, varib := sumb/countb, 0.0
+		for _, e := range pathes[i:] {
+			difference := e.Entropy - avgb
+			varib += difference * difference
+		}
+		varib /= countb
+		gain := vari - (varia + varib)
+		if gain > max {
+			index, max = i, gain
+		}
+	}
+	return index
+}
+
 func markov() {
 	db, err := bolt.Open("model.bolt", 0600, nil)
 	if err != nil {
@@ -296,10 +346,6 @@ func markov() {
 
 	in := []byte("What color is the sky?")
 	//in := []byte("Is the sky blue?")
-	type Result struct {
-		Entropy float64
-		Output  []byte
-	}
 	var search func(depth int, input []byte, done chan Result)
 	search = func(depth int, input []byte, done chan Result) {
 		if depth == 0 {
@@ -314,14 +360,37 @@ func markov() {
 			}
 			return
 		}
-		min, output, next := math.MaxFloat64, []byte{}, make(chan Result, 8)
+		pathes := make([]Result, 256)
 		for i := 0; i < 256; i++ {
 			n := make([]byte, len(input))
 			copy(n, input)
 			n = append(n, byte(i))
-			go search(depth-1, n, next)
+			pathes[i].Output = n
+			total := 0.0
+			entropy := SelfEntropy(db, n)
+			for _, value := range entropy {
+				total += value
+			}
+			pathes[i].Entropy = total
 		}
-		for i := 0; i < 256; i++ {
+		sort.Slice(pathes, func(i, j int) bool {
+			return pathes[i].Entropy < pathes[j].Entropy
+		})
+		index := split(pathes)
+		/*for _, path := range pathes[:index] {
+			fmt.Println(path.Entropy,
+				strings.Map(func(r rune) rune {
+					if unicode.IsPrint(r) {
+						return r
+					}
+					return -1
+				}, "("+string(path.Output))+")")
+		}*/
+		min, output, next := math.MaxFloat64, []byte{}, make(chan Result, 8)
+		for _, path := range pathes[:index] {
+			go search(depth-1, path.Output, next)
+		}
+		for range pathes[:index] {
 			result := <-next
 			if result.Entropy < min {
 				min, output = result.Entropy, result.Output
