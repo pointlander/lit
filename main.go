@@ -348,18 +348,6 @@ func markov() {
 	//in := []byte("Is the sky blue?")
 	var search func(depth int, input []byte, done chan Result)
 	search = func(depth int, input []byte, done chan Result) {
-		if depth == 0 {
-			total := 0.0
-			entropy := SelfEntropy(db, input)
-			for _, value := range entropy {
-				total += value
-			}
-			done <- Result{
-				Entropy: total,
-				Output:  input,
-			}
-			return
-		}
 		pathes := make([]Result, 256)
 		for i := 0; i < 256; i++ {
 			n := make([]byte, len(input))
@@ -386,14 +374,19 @@ func markov() {
 					return -1
 				}, "("+string(path.Output))+")")
 		}*/
-		min, output, next := math.MaxFloat64, []byte{}, make(chan Result, 8)
-		for _, path := range pathes[:index] {
-			go search(depth-1, path.Output, next)
-		}
-		for range pathes[:index] {
-			result := <-next
-			if result.Entropy < min {
-				min, output = result.Entropy, result.Output
+		min, output := math.MaxFloat64, []byte{}
+		if depth <= 1 {
+			min, output = pathes[0].Entropy, pathes[0].Output
+		} else {
+			next := make(chan Result, 8)
+			for _, path := range pathes[:index] {
+				go search(depth-1, path.Output, next)
+			}
+			for range pathes[:index] {
+				result := <-next
+				if result.Entropy < min {
+					min, output = result.Entropy, result.Output
+				}
 			}
 		}
 		done <- Result{
