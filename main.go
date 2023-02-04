@@ -30,7 +30,7 @@ const (
 	// Order is the order of the markov word vector model
 	Order = 9
 	// Depth is the depth of the search
-	Depth = 2
+	Depth = 1
 )
 
 // Vector is a word vector
@@ -198,19 +198,35 @@ func NewSymbolVectorsRandom() SymbolVectors {
 func (s SymbolVectors) Learn(data []byte) {
 	var symbols Symbols
 	for i, symbol := range data[:len(data)-Order+1] {
-		vector := s[symbols]
-		if vector == nil {
-			vector = make(map[byte]uint16, 1)
-		}
-		if vector[symbol] < math.MaxUint16 {
-			vector[symbol]++
-		}
-		for j := 1; j < Order; j++ {
-			if vector[data[i+j]] < math.MaxUint16 {
-				vector[data[i+j]]++
+		for j := 0; j < Order-1; j++ {
+			symbols := symbols
+			for k := 0; k < j; k++ {
+				symbols[k] = 0
 			}
+			vector := s[symbols]
+			if vector == nil {
+				vector = make(map[byte]uint16, 1)
+			}
+			if vector[symbol] < math.MaxUint16 {
+				vector[symbol]++
+			} else {
+				for key, value := range vector {
+					vector[key] = value >> 1
+				}
+				vector[symbol]++
+			}
+			for j := 1; j < Order; j++ {
+				if vector[data[i+j]] < math.MaxUint16 {
+					vector[data[i+j]]++
+				} else {
+					for key, value := range vector {
+						vector[key] = value >> 1
+					}
+					vector[data[i+j]]++
+				}
+			}
+			s[symbols] = vector
 		}
-		s[symbols] = vector
 		for i, value := range symbols[1:] {
 			symbols[i] = value
 		}
@@ -234,42 +250,24 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 		found := false
 		db.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte("markov"))
-			v := b.Get(symbol[:])
-			if v != nil {
-				found = true
-				index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 512)
-				compress.Mark1Decompress1(buffer, output)
-				for key := range decoded {
-					decoded[key] = uint16(output[index])
-					index++
-					decoded[key] |= uint16(output[index]) << 8
-					index++
+			for j := 0; j < Order-1; j++ {
+				symbol := symbol
+				for k := 0; k < j; k++ {
+					symbol[k] = 0
 				}
-			} else {
-				count := 0
-				for i := 0; i < 256; i++ {
-					symbol[0] = byte(i)
-					v := b.Get(symbol[:])
-					if v != nil {
-						count++
-						index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 512)
-						compress.Mark1Decompress1(buffer, output)
-						var d [256]uint16
-						for key := range d {
-							d[key] = uint16(output[index])
-							index++
-							d[key] |= uint16(output[index]) << 8
-							index++
-						}
-						for j, value := range d {
-							if uint(decoded[j])+uint(value) < math.MaxUint16 {
-								decoded[j] += value
-							}
-						}
-					}
-				}
-				if count > 0 {
+				v := b.Get(symbol[:])
+				if v != nil {
 					found = true
+					//fmt.Println(symbol)
+					index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 512)
+					compress.Mark1Decompress1(buffer, output)
+					for key := range decoded {
+						decoded[key] = uint16(output[index])
+						index++
+						decoded[key] |= uint16(output[index]) << 8
+						index++
+					}
+					return nil
 				}
 			}
 			return nil
