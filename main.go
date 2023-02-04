@@ -241,13 +241,14 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 	vector := make([]float64, 256)
 	length := len(input)
 	weights := NewMatrix(width, length-Order+1)
+	orders := make([]int, length-Order+1)
 	for i := 0; i < length-Order+1; i++ {
 		symbol := Symbols{}
 		for j := range symbol {
 			symbol[j] = input[i+j]
 		}
 		var decoded [256]uint16
-		found := false
+		found, order := false, 0
 		db.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte("markov"))
 			for j := 0; j < Order-1; j++ {
@@ -257,7 +258,7 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 				}
 				v := b.Get(symbol[:])
 				if v != nil {
-					found = true
+					found, order = true, j
 					//fmt.Println(symbol)
 					index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 512)
 					compress.Mark1Decompress1(buffer, output)
@@ -272,6 +273,7 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 			}
 			return nil
 		})
+		orders[i] = order
 		if !found {
 			for j := 0; j < 256; j++ {
 				weights.Data = append(weights.Data, 0)
@@ -298,6 +300,10 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 	l1 := Softmax(Mul(Normalize(Mul(projection, weights)), weights))
 	l2 := Softmax(Mul(T(weights), l1))
 	entropy := Entropy(l2)
+
+	for key, value := range entropy.Data {
+		entropy.Data[key] = value / float64(Order-orders[key])
+	}
 
 	return entropy.Data
 }
