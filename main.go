@@ -262,7 +262,9 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 							index++
 						}
 						for j, value := range d {
-							decoded[j] += value
+							if uint(decoded[j])+uint(value) < math.MaxUint16 {
+								decoded[j] += value
+							}
 						}
 					}
 				}
