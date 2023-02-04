@@ -30,7 +30,7 @@ const (
 	// Order is the order of the markov word vector model
 	Order = 9
 	// Depth is the depth of the search
-	Depth = 1
+	Depth = 2
 )
 
 // Vector is a word vector
