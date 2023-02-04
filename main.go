@@ -306,7 +306,7 @@ func split(pathes []Result) int {
 	}
 	vari /= float64(len(pathes))
 
-	index, max := 0, 0.0
+	index, max := 1, 0.0
 	for i := 1; i < len(pathes); i++ {
 		suma, counta := 0.0, 0.0
 		for _, e := range pathes[:i] {
