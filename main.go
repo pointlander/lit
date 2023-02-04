@@ -259,7 +259,6 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 				v := b.Get(symbol[:])
 				if v != nil {
 					found, order = true, j
-					//fmt.Println(symbol)
 					index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 512)
 					compress.Mark1Decompress1(buffer, output)
 					for key := range decoded {
