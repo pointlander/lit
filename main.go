@@ -310,6 +310,8 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 var (
 	// FlagMarkov mode use markov symbol vectors
 	FlagMarkov = flag.Bool("markov", false, "markov symbol vector mode")
+	// FlagInput is the input into the markov model
+	FlagInput = flag.String("input", "What color is the sky?", "input into the markov model")
 	// FlagLearn learn a model
 	FlagLearn = flag.Bool("learn", false, "learns a model")
 	// FlagRanom select random books from gutenberg for training
@@ -375,8 +377,7 @@ func markov() {
 	}
 	defer db.Close()
 
-	in := []byte("What color is the sky?")
-	//in := []byte("Is the sky blue?")
+	in := []byte(*FlagInput)
 	var search func(depth int, input []byte, done chan Result)
 	search = func(depth int, input []byte, done chan Result) {
 		pathes := make([]Result, 256)
