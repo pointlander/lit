@@ -31,6 +31,8 @@ const (
 	Order = 9
 	// Depth is the depth of the search
 	Depth = 2
+	// Width is the width of the probability distribution
+	Width = 256
 )
 
 // Vector is a word vector
@@ -237,17 +239,15 @@ func (s SymbolVectors) Learn(data []byte) {
 // SelfEntropy calculates entropy
 func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 	rnd := rand.New(rand.NewSource(1))
-	width := 256
-	vector := make([]float64, 256)
 	length := len(input)
-	weights := NewMatrix(width, length-Order+1)
+	weights := NewMatrix(Width, length-Order+1)
 	orders := make([]int, length-Order+1)
 	for i := 0; i < length-Order+1; i++ {
 		symbol := Symbols{}
 		for j := range symbol {
 			symbol[j] = input[i+j]
 		}
-		var decoded [256]uint16
+		var decoded [Width]uint16
 		found, order := false, 0
 		db.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte("markov"))
@@ -259,7 +259,7 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 				v := b.Get(symbol[:])
 				if v != nil {
 					found, order = true, j
-					index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 512)
+					index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 2*Width)
 					compress.Mark1Decompress1(buffer, output)
 					for key := range decoded {
 						decoded[key] = uint16(output[index])
@@ -272,13 +272,14 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 			}
 			return nil
 		})
-		orders[i] = order
 		if !found {
-			for j := 0; j < 256; j++ {
+			orders[i] = -1
+			for j := 0; j < Width; j++ {
 				weights.Data = append(weights.Data, 0)
 			}
 		} else {
-			sum := float64(0.0)
+			orders[i] = order
+			vector, sum := make([]float64, Width), float64(0.0)
 			for key, value := range decoded {
 				if value == math.MaxUint16 {
 					fmt.Println("max value")
@@ -295,12 +296,16 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 		}
 	}
 
-	projection := NewRandMatrix(rnd, 256, 256)
+	projection := NewRandMatrix(rnd, Width, Width)
 	l1 := Softmax(Mul(Normalize(Mul(projection, weights)), weights))
 	l2 := Softmax(Mul(T(weights), l1))
 	entropy := Entropy(l2)
 
 	for key, value := range entropy.Data {
+		if orders[key] == -1 {
+			entropy.Data[key] = math.MaxFloat32
+			continue
+		}
 		entropy.Data[key] = value / float64(Order-orders[key])
 	}
 
@@ -380,8 +385,8 @@ func markov() {
 	in := []byte(*FlagInput)
 	var search func(depth int, input []byte, done chan Result)
 	search = func(depth int, input []byte, done chan Result) {
-		pathes := make([]Result, 256)
-		for i := 0; i < 256; i++ {
+		pathes := make([]Result, Width)
+		for i := 0; i < Width; i++ {
 			n := make([]byte, len(input))
 			copy(n, input)
 			n = append(n, byte(i))
@@ -478,11 +483,11 @@ func main() {
 			k := make([]byte, len(key))
 			copy(k, key[:])
 			pairs[i].Key = k
-			v := make([]uint16, 256)
+			v := make([]uint16, Width)
 			for key, value := range value {
 				v[key] = value
 			}
-			index, data := 0, make([]byte, 512)
+			index, data := 0, make([]byte, 2*Width)
 			for _, value := range v {
 				data[index] = byte(value & 0xff)
 				index++
