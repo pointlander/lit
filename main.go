@@ -273,10 +273,18 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 			return nil
 		})
 		if !found {
-			orders[i] = -1
-			for j := 0; j < Width; j++ {
-				weights.Data = append(weights.Data, 0)
+			orders[i] = Order - 1
+			vector, sum := make([]float64, Width), float64(0.0)
+			for key := range vector {
+				v := rnd.Float64()
+				sum += v * v
+				vector[key] = v
 			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			weights.Data = append(weights.Data, vector...)
 		} else {
 			orders[i] = order
 			vector, sum := make([]float64, Width), float64(0.0)
@@ -302,10 +310,6 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 	entropy := Entropy(l2)
 
 	for key, value := range entropy.Data {
-		if orders[key] == -1 {
-			entropy.Data[key] = math.MaxFloat32
-			continue
-		}
 		entropy.Data[key] = value / float64(Order-orders[key])
 	}
 
