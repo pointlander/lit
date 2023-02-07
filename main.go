@@ -435,6 +435,8 @@ func markov() {
 			Output:  output,
 		}
 	}
+	padding := make([]byte, Order-2)
+	in = append(padding, in...)
 	done := make(chan Result, 8)
 	go search(Depth, in, done)
 	result := <-done
