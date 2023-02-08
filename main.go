@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/cmplx"
 	"math/rand"
 	"os"
 	"runtime"
@@ -237,10 +238,11 @@ func (s SymbolVectors) Learn(data []byte) {
 }
 
 // SelfEntropy calculates entropy
-func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
+func SelfEntropy(db *bolt.DB, input []byte) (ax []complex128) {
 	rnd := rand.New(rand.NewSource(1))
 	length := len(input)
-	weights := NewMatrix(Width, length-Order+1)
+	//weights := NewMatrix(Width, length-Order+1)
+	weights := NewComplexMatrix(Width, length-Order+1)
 	orders := make([]int, length-Order+1)
 	for i := 0; i < length-Order+1; i++ {
 		symbol := Symbols{}
@@ -274,46 +276,50 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 		})
 		if !found {
 			orders[i] = Order - 1
-			vector, sum := make([]float64, Width), float64(0.0)
+			vector, sum := make([]complex128, Width), float64(0.0)
 			for key := range vector {
 				v := rnd.Float64()
 				sum += v * v
-				vector[key] = v
+				vector[key] = complex(v, 0)
 			}
-			length := math.Sqrt(sum)
-			for i, v := range vector {
-				vector[i] = v / length
+			l := math.Sqrt(sum)
+			for j, v := range vector {
+				vector[j] = cmplx.Rect(real(v)/l, math.Pi*float64(i)/float64(length-Order+1))
 			}
 			weights.Data = append(weights.Data, vector...)
 		} else {
 			orders[i] = order
-			vector, sum := make([]float64, Width), float64(0.0)
+			vector, sum := make([]complex128, Width), float64(0.0)
 			for key, value := range decoded {
 				if value == math.MaxUint16 {
 					fmt.Println("max value")
 				}
 				v := float64(value)
 				sum += v * v
-				vector[key] = v
+				vector[key] = complex(v, 0)
 			}
-			length := math.Sqrt(sum)
-			for i, v := range vector {
-				vector[i] = v / length
+			l := math.Sqrt(sum)
+			for j, v := range vector {
+				vector[j] = cmplx.Rect(real(v)/l, math.Pi*float64(i)/float64(length-Order+1))
 			}
 			weights.Data = append(weights.Data, vector...)
 		}
 	}
 
-	projection := NewRandMatrix(rnd, Width, Width)
+	/*projection := NewRandMatrix(rnd, Width, Width)
 	l1 := Softmax(Mul(Normalize(Mul(projection, weights)), weights))
 	l2 := Softmax(Mul(T(weights), l1))
-	entropy := Entropy(l2)
+	entropy := Entropy(l2)*/
+	l1 := ComplexSphericalSoftmax(ComplexMul(weights, weights))
+	l2 := ComplexSphericalSoftmax(ComplexMul(ComplexT(weights), l1))
+	entropy := ComplexEntropy(l2)
 
+	values := make([]complex128, len(entropy.Data))
 	for key, value := range entropy.Data {
-		entropy.Data[key] = value / float64(Order-orders[key])
+		values[key] = value / complex(float64(Order-orders[key]), 0)
 	}
 
-	return entropy.Data
+	return values
 }
 
 var (
@@ -395,12 +401,12 @@ func markov() {
 			copy(n, input)
 			n = append(n, byte(i))
 			pathes[i].Output = n
-			total := 0.0
+			total := complex128(0.0)
 			entropy := SelfEntropy(db, n)
 			for _, value := range entropy {
 				total += value
 			}
-			pathes[i].Entropy = total
+			pathes[i].Entropy = cmplx.Abs(total)
 		}
 		sort.Slice(pathes, func(i, j int) bool {
 			return pathes[i].Entropy < pathes[j].Entropy
