@@ -295,8 +295,8 @@ func MarkovProbability(db *bolt.DB, input []byte) (ax []float64) {
 	}
 
 	probabilities, index := make([]float64, length-Order+1), 0
-	for i := 0; i < len(weights.Data)-Width; i += Width {
-		probabilities[index] = weights.Data[i+int(input[index+Order])] * float64(orders[index])
+	for i := 0; i < len(weights.Data); i += Width {
+		probabilities[index] = weights.Data[i+int(input[index+Order-1])] * float64(orders[index])
 		index++
 	}
 
