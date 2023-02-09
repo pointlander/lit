@@ -236,6 +236,73 @@ func (s SymbolVectors) Learn(data []byte) {
 	}
 }
 
+// MarkovProbability calculates the markov probability
+func MarkovProbability(db *bolt.DB, input []byte) (ax []float64) {
+	length := len(input)
+	weights := NewMatrix(Width, length-Order+1)
+	orders := make([]int, length-Order+1)
+	for i := 0; i < length-Order+1; i++ {
+		symbol := Symbols{}
+		for j := range symbol {
+			symbol[j] = input[i+j]
+		}
+		var decoded [Width]uint16
+		found, order := false, 0
+		db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("markov"))
+			for j := 0; j < Order-1; j++ {
+				symbol := symbol
+				for k := 0; k < j; k++ {
+					symbol[k] = 0
+				}
+				v := b.Get(symbol[:])
+				if v != nil {
+					found, order = true, j
+					index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 2*Width)
+					compress.Mark1Decompress1(buffer, output)
+					for key := range decoded {
+						decoded[key] = uint16(output[index])
+						index++
+						decoded[key] |= uint16(output[index]) << 8
+						index++
+					}
+					return nil
+				}
+			}
+			return nil
+		})
+		if !found {
+			orders[i] = 0
+			vector := make([]float64, Width)
+			weights.Data = append(weights.Data, vector...)
+		} else {
+			orders[i] = Order - order
+			vector, sum := make([]float64, Width), float64(0.0)
+			for key, value := range decoded {
+				if value == math.MaxUint16 {
+					fmt.Println("max value")
+				}
+				v := float64(value)
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			weights.Data = append(weights.Data, vector...)
+		}
+	}
+
+	probabilities, index := make([]float64, length-Order+1), 0
+	for i := 0; i < len(weights.Data)-Width; i += Width {
+		probabilities[index] = weights.Data[i+int(input[index+Order])] * float64(orders[index])
+		index++
+	}
+
+	return probabilities
+}
+
 // SelfEntropy calculates entropy
 func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 	rnd := rand.New(rand.NewSource(1))
@@ -317,8 +384,10 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 }
 
 var (
-	// FlagMarkov mode use markov symbol vectors
+	// FlagMarkov mode uses markov symbol vectors
 	FlagMarkov = flag.Bool("markov", false, "markov symbol vector mode")
+	// FlagAttention mode uses markov symbols with attention
+	FlagAttention = flag.Bool("attention", false, "markov symbol attention mode")
 	// FlagInput is the input into the markov model
 	FlagInput = flag.String("input", "What color is the sky?", "input into the markov model")
 	// FlagLearn learn a model
@@ -396,6 +465,77 @@ func markov() {
 			n = append(n, byte(i))
 			pathes[i].Output = n
 			total := 0.0
+			entropy := MarkovProbability(db, n)
+			for _, value := range entropy {
+				total += value
+			}
+			pathes[i].Entropy = total
+		}
+		sort.Slice(pathes, func(i, j int) bool {
+			return pathes[i].Entropy > pathes[j].Entropy
+		})
+		index := split(pathes)
+		/*for _, path := range pathes[:index] {
+			fmt.Println(path.Entropy,
+				strings.Map(func(r rune) rune {
+					if unicode.IsPrint(r) {
+						return r
+					}
+					return -1
+				}, "("+string(path.Output))+")")
+		}*/
+		max, output := 0.0, []byte{}
+		if depth <= 1 {
+			max, output = pathes[0].Entropy, pathes[0].Output
+		} else {
+			next := make(chan Result, 8)
+			for _, path := range pathes[:index] {
+				go search(depth-1, path.Output, next)
+			}
+			for range pathes[:index] {
+				result := <-next
+				if result.Entropy > max {
+					max, output = result.Entropy, result.Output
+				}
+			}
+		}
+		done <- Result{
+			Entropy: max,
+			Output:  output,
+		}
+	}
+	padding := make([]byte, Order-2)
+	in = append(padding, in...)
+	done := make(chan Result, 8)
+	go search(Depth, in, done)
+	result := <-done
+	fmt.Println(result.Entropy, string(result.Output))
+	fmt.Printf("\n")
+	for i := 0; i < 128; i++ {
+		search(Depth, result.Output, done)
+		result = <-done
+		fmt.Println(result.Entropy, string(result.Output))
+		fmt.Printf("\n")
+	}
+}
+
+func markovSelfEntropy() {
+	db, err := bolt.Open("model.bolt", 0600, nil)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	in := []byte(*FlagInput)
+	var search func(depth int, input []byte, done chan Result)
+	search = func(depth int, input []byte, done chan Result) {
+		pathes := make([]Result, Width)
+		for i := 0; i < Width; i++ {
+			n := make([]byte, len(input))
+			copy(n, input)
+			n = append(n, byte(i))
+			pathes[i].Output = n
+			total := 0.0
 			entropy := SelfEntropy(db, n)
 			for _, value := range entropy {
 				total += value
@@ -456,9 +596,10 @@ func main() {
 	if *FlagMarkov {
 		markov()
 		return
-	}
-
-	if *FlagLearn {
+	} else if *FlagAttention {
+		markovSelfEntropy()
+		return
+	} else if *FlagLearn {
 		var s SymbolVectors
 		if *FlagRandom {
 			s = NewSymbolVectorsRandom()
