@@ -371,8 +371,8 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 		}
 	}
 
-	projection := NewRandMatrix(rnd, Width, Width)
-	l1 := Softmax(Mul(Normalize(Mul(projection, weights)), weights))
+	adjacency := Mul(weights, weights)
+	l1 := Softmax(H(adjacency, PageRank(adjacency)))
 	l2 := Softmax(Mul(T(weights), l1))
 	entropy := Entropy(l2)
 

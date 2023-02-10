@@ -16,6 +16,7 @@ require (
 	github.com/blevesearch/snowballstem v0.9.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/klauspost/compress v1.13.6 // indirect
+	github.com/pointlander/pagerank v0.0.0-20210619221740-830548a59275 // indirect
 	github.com/remyoudompheng/go-liblzma v0.0.0-20190506200333-81bf2d431b96 // indirect
 	github.com/ulikunitz/xz v0.5.10 // indirect
 	golang.org/x/sys v0.0.0-20210423082822-04245dca01da // indirect

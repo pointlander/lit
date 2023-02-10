@@ -9,6 +9,8 @@ import (
 	"math"
 	"math/cmplx"
 	"math/rand"
+
+	"github.com/pointlander/pagerank"
 )
 
 const (
@@ -273,6 +275,25 @@ func AppendOne(m Matrix) Matrix {
 		o.Data = append(o.Data, m.Data[i:i+m.Cols]...)
 		o.Data = append(o.Data, 1.0)
 	}
+	return o
+}
+
+// PageRank computes the page rank of the adjacency matrix
+func PageRank(m Matrix) Matrix {
+	o := Matrix{
+		Cols: m.Cols,
+		Rows: m.Rows,
+		Data: make([]float64, m.Cols),
+	}
+	graph := pagerank.NewGraph64()
+	for i := 0; i < m.Rows; i++ {
+		for j := 0; j < m.Cols; j++ {
+			graph.Link(uint64(i), uint64(j), m.Data[i*m.Cols+j])
+		}
+	}
+	graph.Rank(0.85, 0.000001, func(node uint64, rank float64) {
+		o.Data[node] = rank
+	})
 	return o
 }
 
