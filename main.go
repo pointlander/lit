@@ -371,14 +371,15 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 		}
 	}
 
+	importance := NewMatrix(len(orders), 1)
+	for _, order := range orders {
+		importance.Data = append(importance.Data, 1/float64(Order-order))
+	}
+
 	adjacency := Mul(weights, weights)
 	l1 := Softmax(H(adjacency, PageRank(adjacency)))
 	l2 := Softmax(Mul(T(weights), l1))
-	entropy := Entropy(l2)
-
-	for key, value := range entropy.Data {
-		entropy.Data[key] = value / float64(Order-orders[key])
-	}
+	entropy := H(Entropy(l2), importance)
 
 	return entropy.Data
 }
