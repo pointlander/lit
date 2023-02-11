@@ -385,8 +385,7 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 		importance.Data = append(importance.Data, 1/float64(Order-order))
 	}
 
-	adjacency := Mul(weights, weights)
-	l1 := Softmax(H(adjacency, PageRank(adjacency)))
+	l1 := Softmax(Mul(weights, weights))
 	l2 := Softmax(Mul(T(weights), l1))
 	entropy := H(Entropy(l2), importance)
 
@@ -592,11 +591,13 @@ func markovSelfEntropy() {
 	done := make(chan Result, 8)
 	go search(Depth, in, done)
 	result := <-done
+	result.Output = result.Output[:len(result.Output)-Depth+1]
 	fmt.Println(result.Entropy, string(result.Output))
 	fmt.Printf("\n")
 	for i := 0; i < 128; i++ {
 		search(Depth, result.Output, done)
 		result = <-done
+		result.Output = result.Output[:len(result.Output)-Depth+1]
 		fmt.Println(result.Entropy, string(result.Output))
 		fmt.Printf("\n")
 	}
