@@ -14,6 +14,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -127,7 +128,11 @@ type SymbolVectors map[Symbols]map[byte]uint16
 // NewSymbolVectors makes new markov symbol vector model
 func NewSymbolVectors() SymbolVectors {
 	vectors := make(SymbolVectors)
-	reader, err := zim.NewReader("/home/andrew/Downloads/gutenberg_en_all_2022-04.zim", false)
+	data, err := filepath.Abs(*FlagData)
+	if err != nil {
+		panic(err)
+	}
+	reader, err := zim.NewReader(data, false)
 	if err != nil {
 		panic(err)
 	}
@@ -158,7 +163,11 @@ func NewSymbolVectors() SymbolVectors {
 func NewSymbolVectorsRandom() SymbolVectors {
 	rnd := rand.New(rand.NewSource(1))
 	vectors := make(SymbolVectors)
-	reader, err := zim.NewReader("/home/andrew/Downloads/gutenberg_en_all_2022-04.zim", false)
+	data, err := filepath.Abs(*FlagData)
+	if err != nil {
+		panic(err)
+	}
+	reader, err := zim.NewReader(data, false)
 	if err != nil {
 		panic(err)
 	}
@@ -393,6 +402,8 @@ var (
 	FlagInput = flag.String("input", "What color is the sky?", "input into the markov model")
 	// FlagLearn learn a model
 	FlagLearn = flag.Bool("learn", false, "learns a model")
+	// FlagData is the path to the training data
+	FlagData = flag.String("data", "gutenberg_en_all_2022-04.zim", "path to the training data")
 	// FlagRanom select random books from gutenberg for training
 	FlagRandom = flag.Bool("random", false, "use random books from gutenberg")
 	// FlagScale the scaling factor for the amount of samples
