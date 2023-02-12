@@ -21,6 +21,6 @@ func BenchmarkFastSelfEntropyKernel(b *testing.B) {
 	rnd := rand.New(rand.NewSource(1))
 	weights, importance := NewRandMatrix(rnd, Width, 128), NewRandMatrix(rnd, 128, 1)
 	for n := 0; n < b.N; n++ {
-		SelfEntropyKernel(weights, weights, weights, importance)
+		FastSelfEntropyKernel(weights, weights, weights, importance)
 	}
 }
