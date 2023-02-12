@@ -54,6 +54,55 @@ func (m Matrix) Size() int {
 	return m.Cols * m.Rows
 }
 
+// SelfEntropyKernel computes the self entropy of Q, K V
+func SelfEntropyKernel(Q, K, V, I Matrix) float64 {
+	softmax := func(values []float64) {
+		max := 0.0
+		for _, v := range values {
+			if v > max {
+				max = v
+			}
+		}
+		s := max * S
+		sum := 0.0
+		for j, value := range values {
+			values[j] = math.Exp(value - s)
+			sum += values[j]
+		}
+		for j, value := range values {
+			values[j] = value / sum
+		}
+	}
+	entropies, values, sum := make([]float64, V.Cols), make([]float64, K.Rows), 0.0
+	for i := 0; i < K.Rows; i++ {
+		K := K.Data[i*K.Cols : (i+1)*K.Cols]
+		for j := 0; j < Q.Rows; j++ {
+			value := 0.0
+			for k := 0; k < Q.Cols; k++ {
+				value += K[k] * Q.Data[j*Q.Cols+k]
+			}
+			values[j] = value
+		}
+		softmax(values)
+
+		for j := 0; j < V.Cols; j++ {
+			sum := 0.0
+			for k := 0; k < V.Rows; k++ {
+				sum += values[k] * V.Data[k*V.Cols+j]
+			}
+			entropies[j] = sum
+		}
+		softmax(entropies)
+
+		entropy := 0.0
+		for _, e := range entropies {
+			entropy += e * math.Log(e)
+		}
+		sum -= entropy * I.Data[i]
+	}
+	return sum
+}
+
 // Mul multiplies two matrices
 func Mul(m Matrix, n Matrix) Matrix {
 	if m.Cols != n.Cols {

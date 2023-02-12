@@ -385,11 +385,14 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 		importance.Data = append(importance.Data, 1/float64(Order-order))
 	}
 
-	l1 := Softmax(Mul(weights, weights))
+	/*l1 := Softmax(Mul(weights, weights))
 	l2 := Softmax(Mul(T(weights), l1))
-	entropy := H(Entropy(l2), importance)
+	entropy := H(Entropy(l2), importance)*/
 
-	return entropy.Data
+	entropy := make([]float64, 1)
+	entropy[0] = SelfEntropyKernel(weights, weights, weights, importance)
+
+	return entropy
 }
 
 var (
