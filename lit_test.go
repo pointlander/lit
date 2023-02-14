@@ -9,9 +9,26 @@ import (
 	"testing"
 )
 
+// Length is the length of the matrix
+const Length = 128
+
+func BenchmarkSelfEntropy(b *testing.B) {
+	rnd := rand.New(rand.NewSource(1))
+	weights, importance := NewRandMatrix(rnd, Width, Length), NewRandMatrix(rnd, Length, 1)
+	for n := 0; n < b.N; n++ {
+		l1 := Softmax(Mul(weights, weights))
+		l2 := Softmax(Mul(T(weights), l1))
+		entropy := H(Entropy(l2), importance)
+		sum := 0.0
+		for _, value := range entropy.Data {
+			sum += value
+		}
+	}
+}
+
 func BenchmarkSelfEntropyKernel(b *testing.B) {
 	rnd := rand.New(rand.NewSource(1))
-	weights, importance := NewRandMatrix(rnd, Width, 128), NewRandMatrix(rnd, 128, 1)
+	weights, importance := NewRandMatrix(rnd, Width, Length), NewRandMatrix(rnd, Length, 1)
 	for n := 0; n < b.N; n++ {
 		SelfEntropyKernel(weights, weights, weights, importance)
 	}
@@ -19,7 +36,7 @@ func BenchmarkSelfEntropyKernel(b *testing.B) {
 
 func BenchmarkFastSelfEntropyKernel(b *testing.B) {
 	rnd := rand.New(rand.NewSource(1))
-	weights, importance := NewRandMatrix(rnd, Width, 128), NewRandMatrix(rnd, 128, 1)
+	weights, importance := NewRandMatrix(rnd, Width, Length), NewRandMatrix(rnd, Length, 1)
 	for n := 0; n < b.N; n++ {
 		FastSelfEntropyKernel(weights, weights, weights, importance)
 	}
