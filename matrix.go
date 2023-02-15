@@ -79,20 +79,14 @@ func SelfEntropyKernel(Q, K, V, I Matrix) float64 {
 	for i := 0; i < K.Rows; i++ {
 		K := K.Data[i*K.Cols : (i+1)*K.Cols]
 		for j := 0; j < Q.Rows; j++ {
-			Q, value := Q.Data[j*Q.Cols:(j+1)*Q.Cols], 0.0
-			for k, v := range Q {
-				value += K[k] * v
-			}
-			values[j] = value
+			Q := Q.Data[j*Q.Cols : (j+1)*Q.Cols]
+			values[j] = dot(K, Q)
 		}
 		softmax(values)
 
 		for j := 0; j < V.Rows; j++ {
-			V, sum := V.Data[j*V.Cols:(j+1)*V.Cols], 0.0
-			for k, value := range V {
-				sum += values[k] * value
-			}
-			entropies[j] = sum
+			V := V.Data[j*V.Cols : (j+1)*V.Cols]
+			entropies[j] = dot(values, V)
 		}
 		softmax(entropies)
 
@@ -124,20 +118,14 @@ func FastSelfEntropyKernel(Q, K, V, I Matrix) float64 {
 	for i := 0; i < K.Rows; i++ {
 		K := K.Data[i*K.Cols : (i+1)*K.Cols]
 		for j := 0; j < Q.Rows; j++ {
-			Q, value := Q.Data[j*Q.Cols:(j+1)*Q.Cols], 0.0
-			for k, v := range Q {
-				value += K[k] * v
-			}
-			values[j] = value
+			Q := Q.Data[j*Q.Cols : (j+1)*Q.Cols]
+			values[j] = dot(K, Q)
 		}
 		spherical(values)
 
 		for j := 0; j < V.Rows; j++ {
-			V, sum := V.Data[j*V.Cols:(j+1)*V.Cols], 0.0
-			for k, value := range V {
-				sum += values[k] * value
-			}
-			entropies[j] = sum
+			V := V.Data[j*V.Cols : (j+1)*V.Cols]
+			entropies[j] = dot(values, V)
 		}
 		spherical(entropies)
 

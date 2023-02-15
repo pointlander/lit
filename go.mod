@@ -19,5 +19,6 @@ require (
 	github.com/pointlander/pagerank v0.0.0-20210619221740-830548a59275 // indirect
 	github.com/remyoudompheng/go-liblzma v0.0.0-20190506200333-81bf2d431b96 // indirect
 	github.com/ulikunitz/xz v0.5.10 // indirect
+	github.com/ziutek/blas v0.0.0-20190227122918-da4ca23e90bb // indirect
 	golang.org/x/sys v0.0.0-20210423082822-04245dca01da // indirect
 )
