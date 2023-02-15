@@ -153,11 +153,8 @@ func Mul(m Matrix, n Matrix) Matrix {
 	for i := 0; i < lenn; i += columns {
 		nn := n.Data[i : i+columns]
 		for j := 0; j < lenm; j += columns {
-			mm, sum := m.Data[j:j+columns], 0.0
-			for k, value := range mm {
-				sum += value * nn[k]
-			}
-			o.Data = append(o.Data, sum)
+			mm := m.Data[j : j+columns]
+			o.Data = append(o.Data, dot(mm, nn))
 		}
 	}
 	return o
