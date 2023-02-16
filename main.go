@@ -396,6 +396,8 @@ var (
 	FlagMarkov = flag.Bool("markov", false, "markov symbol vector mode")
 	// FlagAttention mode uses markov symbols with attention
 	FlagAttention = flag.Bool("attention", false, "markov symbol attention mode")
+	// FlagDiffusion is a diffusion based model
+	FlagDiffusion = flag.Bool("diffusion", false, "diffusion mode")
 	// FlagInput is the input into the markov model
 	FlagInput = flag.String("input", "What color is the sky?", "input into the markov model")
 	// FlagLearn learn a model
@@ -602,6 +604,80 @@ func markovSelfEntropy() {
 	}
 }
 
+func markovSelfEntropyDiffusion() {
+	rnd := rand.New(rand.NewSource(1))
+
+	db, err := bolt.Open("model.bolt", 0600, nil)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	in := []byte(*FlagInput)
+	var search func(index, depth int, input []byte, done chan Result)
+	search = func(idx, depth int, input []byte, done chan Result) {
+		pathes := make([]Result, Width)
+		for i := 0; i < Width; i++ {
+			n := make([]byte, len(input))
+			copy(n, input)
+			n[idx] = byte(i)
+			pathes[i].Output = n
+			total := 0.0
+			entropy := SelfEntropy(db, n)
+			for _, value := range entropy {
+				total += value
+			}
+			pathes[i].Entropy = total
+		}
+		sort.Slice(pathes, func(i, j int) bool {
+			return pathes[i].Entropy < pathes[j].Entropy
+		})
+		index := split(pathes)
+		/*for _, path := range pathes[:index] {
+			fmt.Println(path.Entropy,
+				strings.Map(func(r rune) rune {
+					if unicode.IsPrint(r) {
+						return r
+					}
+					return -1
+				}, "("+string(path.Output))+")")
+		}*/
+		min, output := math.MaxFloat64, []byte{}
+		if depth <= 1 {
+			min, output = pathes[0].Entropy, pathes[0].Output
+		} else {
+			next := make(chan Result, 8)
+			for _, path := range pathes[:index] {
+				go search(idx, depth-1, path.Output, next)
+			}
+			for range pathes[:index] {
+				result := <-next
+				if result.Entropy < min {
+					min, output = result.Entropy, result.Output
+				}
+			}
+		}
+		done <- Result{
+			Entropy: min,
+			Output:  output,
+		}
+	}
+	padding := make([]byte, Order-2)
+	size := len(in)
+	in = append(padding, in...)
+	done := make(chan Result, 8)
+	go search(Order-2+rnd.Intn(size), 1, in, done)
+	result := <-done
+	fmt.Println(result.Entropy, string(result.Output))
+	fmt.Printf("\n")
+	for i := 0; i < 512; i++ {
+		search(Order-2+rnd.Intn(size), 1, result.Output, done)
+		result = <-done
+		fmt.Println(result.Entropy, string(result.Output))
+		fmt.Printf("\n")
+	}
+}
+
 func main() {
 	flag.Parse()
 
@@ -610,6 +686,9 @@ func main() {
 		return
 	} else if *FlagAttention {
 		markovSelfEntropy()
+		return
+	} else if *FlagDiffusion {
+		markovSelfEntropyDiffusion()
 		return
 	} else if *FlagLearn {
 		var s SymbolVectors
