@@ -400,6 +400,8 @@ var (
 	FlagDiffusion = flag.Bool("diffusion", false, "diffusion mode")
 	// FlagInput is the input into the markov model
 	FlagInput = flag.String("input", "What color is the sky?", "input into the markov model")
+	// FlagRandomInput use random input
+	FlagRandomInput = flag.Int("randomInput", 0, "random string")
 	// FlagLearn learn a model
 	FlagLearn = flag.Bool("learn", false, "learns a model")
 	// FlagData is the path to the training data
@@ -614,6 +616,13 @@ func markovSelfEntropyDiffusion() {
 	defer db.Close()
 
 	in := []byte(*FlagInput)
+	if *FlagRandomInput != 0 {
+		rnd := rand.New(rand.NewSource(int64(*FlagRandomInput)))
+		symbols := []byte("abcdefghijklmnopqrstuvwxyz")
+		for i := range in {
+			in[i] = symbols[rnd.Intn(len(symbols))]
+		}
+	}
 	var search func(index, depth int, input []byte, done chan Result)
 	search = func(idx, depth int, input []byte, done chan Result) {
 		pathes := make([]Result, Width)
