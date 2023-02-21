@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/pointlander/compress"
+	"github.com/pointlander/pagerank"
 
 	zim "github.com/akhenakh/gozim"
 	"github.com/k3a/html2text"
@@ -402,6 +403,8 @@ var (
 	FlagInput = flag.String("input", "What color is the sky?", "input into the markov model")
 	// FlagRandomInput use random input
 	FlagRandomInput = flag.Int("randomInput", 0, "random string")
+	// FlagPagerank page rank mode
+	FlagPageRank = flag.Bool("pagerank", false, "pagerank mode")
 	// FlagLearn learn a model
 	FlagLearn = flag.Bool("learn", false, "learns a model")
 	// FlagData is the path to the training data
@@ -698,6 +701,98 @@ func main() {
 		return
 	} else if *FlagDiffusion {
 		markovSelfEntropyDiffusion()
+		return
+	} else if *FlagPageRank {
+		db, err := bolt.Open("model.bolt", 0600, nil)
+		if err != nil {
+			panic(err)
+		}
+		defer db.Close()
+
+		lookup := func(symbol Symbols) (found bool, vector []float64) {
+			var decoded [Width]uint16
+			db.View(func(tx *bolt.Tx) error {
+				b := tx.Bucket([]byte("markov"))
+				v := b.Get(symbol[:])
+				if v != nil {
+					found = true
+					index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 2*Width)
+					compress.Mark1Decompress1(buffer, output)
+					for key := range decoded {
+						decoded[key] = uint16(output[index])
+						index++
+						decoded[key] |= uint16(output[index]) << 8
+						index++
+					}
+					return nil
+				}
+				return nil
+			})
+			if !found {
+				return found, nil
+			}
+			vector, sum := make([]float64, Width), float64(0.0)
+			for key, value := range decoded {
+				v := float64(value)
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			return found, vector
+		}
+
+		graph := pagerank.NewGraph64()
+		for i := 0; i < Width*Width; i++ {
+			x := Symbols{}
+			x[Order-2] = byte(i >> 8)
+			x[Order-1] = byte(i & 0xff)
+			found, a := lookup(x)
+			if !found {
+				continue
+			}
+			for j := 0; j < Width*Width; j++ {
+				y := Symbols{}
+				y[Order-2] = byte(j >> 8)
+				y[Order-1] = byte(j & 0xff)
+				found, b := lookup(y)
+				if !found {
+					continue
+				}
+				sum := 0.0
+				for k, value := range a {
+					sum += value * b[k]
+				}
+				graph.Link(uint64(i), uint64(j), sum)
+			}
+		}
+		fmt.Println("graph built")
+		type Node struct {
+			Node int
+			Rank float64
+		}
+		nodes := make([]Node, 0, 8)
+		graph.Rank(0.85, 1e-12, func(node uint64, rank float64) {
+			nodes = append(nodes, Node{
+				Node: int(node),
+				Rank: rank,
+			})
+		})
+		fmt.Println("ranking done")
+		sort.Slice(nodes, func(i, j int) bool {
+			return nodes[i].Rank > nodes[j].Rank
+		})
+		fmt.Println("sorting done")
+		output, err := os.Create("output.txt")
+		if err != nil {
+			panic(err)
+		}
+		defer output.Close()
+		for _, node := range nodes {
+			fmt.Fprintf(output, "%04x %.12f\n", node.Node, node.Rank)
+		}
 		return
 	} else if *FlagLearn {
 		var s SymbolVectors
