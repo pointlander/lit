@@ -147,6 +147,73 @@ func (s SymbolVectors) Learn(data []byte) {
 	}
 }
 
+// Square is a square markov vector model
+type Square [(1 << 16) + 256][]uint16
+
+// NewSquareRandom makes new square markov vector model
+func NewSquareRandom() *Square {
+	rnd := rand.New(rand.NewSource(1))
+	vectors := &Square{}
+	for i := range vectors {
+		vectors[i] = make([]uint16, 1<<16)
+	}
+	data, err := filepath.Abs(*FlagData)
+	if err != nil {
+		panic(err)
+	}
+	reader, err := zim.NewReader(data, false)
+	if err != nil {
+		panic(err)
+	}
+	var m runtime.MemStats
+	i, length := 0, reader.ArticleCount
+	for {
+		index := rnd.Intn(int(length))
+		if index == 0 {
+			continue
+		}
+		article, err := reader.ArticleAtURLIdx(uint32(index))
+		if err != nil {
+			continue
+		}
+		url := article.FullURL()
+		if strings.HasSuffix(url, ".html") {
+			html, err := article.Data()
+			if err != nil {
+				panic(err)
+			}
+			plain := html2text.HTML2Text(string(html))
+			runtime.ReadMemStats(&m)
+			fmt.Printf("%5d %5d %s\n", m.Alloc/(1024*1024), i, url)
+			vectors.Learn([]byte(plain))
+			if i%100 == 0 {
+				runtime.GC()
+			}
+			if i == *FlagScale*1024 {
+				break
+			}
+			i++
+		}
+	}
+	fmt.Println("done")
+	return vectors
+}
+
+// Learn learns a square markov model from data
+func (s Square) Learn(data []byte) {
+	for i := 5; i < len(data)-4; i++ {
+		index := (uint16(data[i-1]) << 8) | uint16(data[i])
+		for j := -4; j < -1; j++ {
+			s[index][(uint16(data[i-1-j])<<8)|uint16(data[i-j])]++
+			s[index&0xff][(uint16(data[i-1-j])<<8)|uint16(data[i-j])]++
+		}
+		for j := 2; j < 5; j++ {
+			s[index][(uint16(data[i-1+j])<<8)|uint16(data[i+j])]++
+			s[index&0xff][(uint16(data[i-1+j])<<8)|uint16(data[i+j])]++
+		}
+	}
+}
+
 // MarkovProbability calculates the markov probability
 func MarkovProbability(db *bolt.DB, input []byte) (ax []float64) {
 	length := len(input)

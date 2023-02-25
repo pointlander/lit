@@ -28,6 +28,8 @@ const (
 )
 
 var (
+	// FlagSquare uses square markov model
+	FlagSquare = flag.Bool("square", false, "square markov model")
 	// FlagMarkov mode uses markov symbol vectors
 	FlagMarkov = flag.Bool("markov", false, "markov symbol vector mode")
 	// FlagAttention mode uses markov symbols with attention
@@ -237,6 +239,10 @@ func main() {
 			})
 		}
 		fmt.Println("done writing file")
+		return
+	} else if *FlagSquare {
+		s := NewSquareRandom()
+		_ = s
 		return
 	}
 
