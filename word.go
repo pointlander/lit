@@ -86,7 +86,7 @@ func NewVectors(file string) Vectors {
 func (v *Vectors) Entropy(input []string) (ax []float64) {
 	width := len(v.Dictionary["dog"].Vector)
 	length := len(input)
-	weights := NewMatrix(width, length)
+	weights := NewMatrix(0, width, length)
 	for _, word := range input {
 		vector := v.Dictionary[word].Vector
 		weights.Data = append(weights.Data, vector...)

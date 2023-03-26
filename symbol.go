@@ -241,7 +241,7 @@ func (s Square) Learn(data []byte) {
 // MarkovProbability calculates the markov probability
 func MarkovProbability(db *bolt.DB, input []byte) (ax []float64) {
 	length := len(input)
-	weights := NewMatrix(Width, length-Order+1)
+	weights := NewMatrix(0, Width, length-Order+1)
 	orders := make([]int, length-Order+1)
 	for i := 0; i < length-Order+1; i++ {
 		symbol := Symbols{}
@@ -309,7 +309,7 @@ func MarkovProbability(db *bolt.DB, input []byte) (ax []float64) {
 func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 	rnd := rand.New(rand.NewSource(1))
 	length := len(input)
-	weights := NewMatrix(Width, length-Order+1)
+	weights := NewMatrix(0, Width, length-Order+1)
 	orders := make([]int, length-Order+1)
 	for i := 0; i < length-Order+1; i++ {
 		symbol := Symbols{}
@@ -373,7 +373,7 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 		}
 	}
 
-	importance := NewMatrix(len(orders), 1)
+	importance := NewMatrix(0, len(orders), 1)
 	for _, order := range orders {
 		importance.Data = append(importance.Data, 1/float64(Order-order))
 	}

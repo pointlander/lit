@@ -18,25 +18,41 @@ const (
 	S = 1.0 - 1e-300
 )
 
+const (
+	// StateM is the state for the mean
+	StateM = iota
+	// StateV is the state for the variance
+	StateV
+	// StateTotal is the total number of states
+	StateTotal
+)
+
 // Matrix is a matrix
 type Matrix struct {
-	Cols int
-	Rows int
-	Data []float64
+	Cols   int
+	Rows   int
+	Data   []float64
+	States [][]float64
 }
 
 // NewMatrix creates a new matrix
-func NewMatrix(cols, rows int) Matrix {
+func NewMatrix(states, cols, rows int) Matrix {
 	m := Matrix{
 		Cols: cols,
 		Rows: rows,
 		Data: make([]float64, 0, cols*rows),
 	}
+	if states > 0 {
+		m.States = make([][]float64, states)
+		for i := range m.States {
+			m.States[i] = make([]float64, cols*rows)
+		}
+	}
 	return m
 }
 
 // NewRandMatrix creates a new random matrix
-func NewRandMatrix(rnd *rand.Rand, cols, rows int) Matrix {
+func NewRandMatrix(rnd *rand.Rand, states, cols, rows int) Matrix {
 	m := Matrix{
 		Cols: cols,
 		Rows: rows,
@@ -45,6 +61,12 @@ func NewRandMatrix(rnd *rand.Rand, cols, rows int) Matrix {
 	factor := math.Sqrt(2.0 / float64(cols))
 	for i := 0; i < cols*rows; i++ {
 		m.Data = append(m.Data, rnd.NormFloat64()*factor)
+	}
+	if states > 0 {
+		m.States = make([][]float64, states)
+		for i := range m.States {
+			m.States[i] = make([]float64, cols*rows)
+		}
 	}
 	return m
 }
@@ -380,31 +402,44 @@ func PageRank(m Matrix) Matrix {
 
 // ComplexMatrix is a complex matrix
 type ComplexMatrix struct {
-	Cols int
-	Rows int
-	Data []complex128
+	Cols   int
+	Rows   int
+	Data   []complex64
+	States [][]complex64
 }
 
 // NewComplexMatrix creates a new complex matrix
-func NewComplexMatrix(cols, rows int) ComplexMatrix {
+func NewComplexMatrix(states, cols, rows int) ComplexMatrix {
 	m := ComplexMatrix{
 		Cols: cols,
 		Rows: rows,
-		Data: make([]complex128, 0, cols*rows),
+		Data: make([]complex64, 0, cols*rows),
+	}
+	if states > 0 {
+		m.States = make([][]complex64, states)
+		for i := range m.States {
+			m.States[i] = make([]complex64, cols*rows)
+		}
 	}
 	return m
 }
 
 // NewRandComplexMatrix creates a new random matrix
-func NewRandComplexMatrix(rnd *rand.Rand, cols, rows int) ComplexMatrix {
+func NewRandComplexMatrix(rnd *rand.Rand, states, cols, rows int) ComplexMatrix {
 	m := ComplexMatrix{
 		Cols: cols,
 		Rows: rows,
-		Data: make([]complex128, 0, cols*rows),
+		Data: make([]complex64, 0, cols*rows),
 	}
 	factor := math.Sqrt(2.0 / float64(cols))
 	for i := 0; i < cols*rows; i++ {
-		m.Data = append(m.Data, complex(rnd.NormFloat64()*factor, rnd.NormFloat64()*factor))
+		m.Data = append(m.Data, complex(float32(rnd.NormFloat64()*factor), float32(rnd.NormFloat64()*factor)))
+	}
+	if states > 0 {
+		m.States = make([][]complex64, states)
+		for i := range m.States {
+			m.States[i] = make([]complex64, cols*rows)
+		}
 	}
 	return m
 }
@@ -423,13 +458,13 @@ func ComplexMul(m ComplexMatrix, n ComplexMatrix) ComplexMatrix {
 	o := ComplexMatrix{
 		Cols: m.Rows,
 		Rows: n.Rows,
-		Data: make([]complex128, 0, m.Rows*n.Rows),
+		Data: make([]complex64, 0, m.Rows*n.Rows),
 	}
 	lenn, lenm := len(n.Data), len(m.Data)
 	for i := 0; i < lenn; i += columns {
 		nn := n.Data[i : i+columns]
 		for j := 0; j < lenm; j += columns {
-			mm, sum := m.Data[j:j+columns], complex128(0.0)
+			mm, sum := m.Data[j:j+columns], complex64(0.0)
 			for k, value := range mm {
 				sum += value * nn[k]
 			}
@@ -449,7 +484,7 @@ func ComplexH(m ComplexMatrix, n ComplexMatrix) ComplexMatrix {
 	o := ComplexMatrix{
 		Cols: m.Cols,
 		Rows: m.Rows,
-		Data: make([]complex128, 0, m.Cols*m.Rows),
+		Data: make([]complex64, 0, m.Cols*m.Rows),
 	}
 	for i, value := range m.Data {
 		o.Data = append(o.Data, value*n.Data[i%lenb])
@@ -467,7 +502,7 @@ func ComplexAdd(m ComplexMatrix, n ComplexMatrix) ComplexMatrix {
 	o := ComplexMatrix{
 		Cols: m.Cols,
 		Rows: m.Rows,
-		Data: make([]complex128, 0, m.Cols*m.Rows),
+		Data: make([]complex64, 0, m.Cols*m.Rows),
 	}
 	for i, value := range m.Data {
 		o.Data = append(o.Data, value+n.Data[i%lenb])
@@ -485,7 +520,7 @@ func ComplexSub(m ComplexMatrix, n ComplexMatrix) ComplexMatrix {
 	o := ComplexMatrix{
 		Cols: m.Cols,
 		Rows: m.Rows,
-		Data: make([]complex128, 0, m.Cols*m.Rows),
+		Data: make([]complex64, 0, m.Cols*m.Rows),
 	}
 	for i, value := range m.Data {
 		o.Data = append(o.Data, value-n.Data[i%lenb])
@@ -500,11 +535,11 @@ func ComplexSphericalSoftmax(m ComplexMatrix) ComplexMatrix {
 	o := ComplexMatrix{
 		Cols: m.Cols,
 		Rows: m.Rows,
-		Data: make([]complex128, 0, m.Cols*m.Rows),
+		Data: make([]complex64, 0, m.Cols*m.Rows),
 	}
-	values := make([]complex128, width)
+	values := make([]complex64, width)
 	for i := 0; i < size; i += width {
-		sum := complex(0, 0)
+		sum := complex(float32(0), float32(0))
 		for j, ax := range m.Data[i : i+width] {
 			values[j] = ax*ax + E
 			sum += values[j]
@@ -522,14 +557,14 @@ func ComplexNormalize(m ComplexMatrix) ComplexMatrix {
 	o := ComplexMatrix{
 		Cols: m.Cols,
 		Rows: m.Rows,
-		Data: make([]complex128, 0, m.Cols*m.Rows),
+		Data: make([]complex64, 0, m.Cols*m.Rows),
 	}
 	for i := 0; i < size; i += width {
-		sum := complex128(0.0)
+		sum := complex64(0.0)
 		for _, ax := range m.Data[i : i+width] {
 			sum += ax * ax
 		}
-		length := cmplx.Sqrt(sum)
+		length := complex64(cmplx.Sqrt(complex128(sum)))
 		if sum == 0 {
 			length = 1
 		}
@@ -546,13 +581,13 @@ func ComplexEntropy(m ComplexMatrix) ComplexMatrix {
 	o := ComplexMatrix{
 		Cols: m.Rows,
 		Rows: 1,
-		Data: make([]complex128, 0, m.Rows),
+		Data: make([]complex64, 0, m.Rows),
 	}
 	for i := 0; i < size; i += width {
-		sum := complex128(0.0)
+		sum := complex64(0.0)
 		for k := 0; k < width; k++ {
 			ax := m.Data[i+k]
-			sum += ax * cmplx.Log(ax)
+			sum += ax * complex64(cmplx.Log(complex128(ax)))
 		}
 		o.Data = append(o.Data, -sum)
 	}
@@ -564,7 +599,7 @@ func ComplexNeg(m ComplexMatrix) ComplexMatrix {
 	o := ComplexMatrix{
 		Cols: m.Cols,
 		Rows: m.Rows,
-		Data: make([]complex128, 0, m.Cols*m.Rows),
+		Data: make([]complex64, 0, m.Cols*m.Rows),
 	}
 	for _, value := range m.Data {
 		o.Data = append(o.Data, -value)
@@ -577,16 +612,16 @@ func ComplexLogis(m ComplexMatrix) ComplexMatrix {
 	o := ComplexMatrix{
 		Cols: m.Cols,
 		Rows: m.Rows,
-		Data: make([]complex128, 0, m.Cols*m.Rows),
+		Data: make([]complex64, 0, m.Cols*m.Rows),
 	}
 	for _, value := range m.Data {
-		o.Data = append(o.Data, 1/(1+cmplx.Exp(-value)))
+		o.Data = append(o.Data, 1/(1+complex64(cmplx.Exp(complex128(-value)))))
 	}
 	return o
 }
 
-func complexLogis(value complex128) complex128 {
-	return 1 / (1 + cmplx.Exp(-value))
+func complexLogis(value complex64) complex64 {
+	return 1 / (1 + complex64(cmplx.Exp(complex128(-value))))
 }
 
 // ComplexDLogis computes the dlogis of a complex matrix
@@ -594,7 +629,7 @@ func ComplexDLogis(m ComplexMatrix) ComplexMatrix {
 	o := ComplexMatrix{
 		Cols: m.Cols,
 		Rows: m.Rows,
-		Data: make([]complex128, 0, m.Cols*m.Rows),
+		Data: make([]complex64, 0, m.Cols*m.Rows),
 	}
 	for _, value := range m.Data {
 		o.Data = append(o.Data, complexLogis(value)*(1-complexLogis(value)))
@@ -607,7 +642,7 @@ func ComplexT(m ComplexMatrix) ComplexMatrix {
 	o := ComplexMatrix{
 		Cols: m.Rows,
 		Rows: m.Cols,
-		Data: make([]complex128, 0, m.Cols*m.Rows),
+		Data: make([]complex64, 0, m.Cols*m.Rows),
 	}
 	for i := 0; i < m.Cols; i++ {
 		for j := 0; j < m.Rows; j++ {
@@ -622,7 +657,7 @@ func ComplexAppendOne(m ComplexMatrix) ComplexMatrix {
 	o := ComplexMatrix{
 		Cols: m.Cols + 1,
 		Rows: m.Rows,
-		Data: make([]complex128, 0, (m.Cols+1)*m.Rows),
+		Data: make([]complex64, 0, (m.Cols+1)*m.Rows),
 	}
 	length := len(m.Data)
 	for i := 0; i < length; i += m.Cols {
