@@ -449,6 +449,49 @@ func (m ComplexMatrix) Size() int {
 	return m.Cols * m.Rows
 }
 
+// https://arxiv.org/abs/1511.05042
+func complexSpherical(values []complex64) {
+	sum := complex64(0.0)
+	for j, value := range values {
+		values[j] = value*value/2 + value + 1
+		sum += values[j]
+	}
+	for j, value := range values {
+		values[j] = value / sum
+	}
+}
+
+// FastSelfEntropyKernel computes the fast complex self entropy of Q, K V
+func FastComplexSelfEntropyKernel(Q, K, V, I ComplexMatrix) float64 {
+	entropies, values, sum := make([]complex64, V.Cols), make([]complex64, K.Rows), complex64(0.0)
+	V = ComplexT(V)
+	for i := 0; i < K.Rows; i++ {
+		K := K.Data[i*K.Cols : (i+1)*K.Cols]
+		for j := 0; j < Q.Rows; j++ {
+			Q := Q.Data[j*Q.Cols : (j+1)*Q.Cols]
+			for k, value := range K {
+				values[j] += value * Q[k]
+			}
+		}
+		complexSpherical(values)
+
+		for j := 0; j < V.Rows; j++ {
+			V := V.Data[j*V.Cols : (j+1)*V.Cols]
+			for k, value := range values {
+				entropies[j] += value * V[k]
+			}
+		}
+		complexSpherical(entropies)
+
+		entropy := complex64(0.0)
+		for _, e := range entropies {
+			entropy += e * complex64(cmplx.Log(complex128(e)))
+		}
+		sum -= entropy * I.Data[i]
+	}
+	return cmplx.Abs(complex128(sum))
+}
+
 // ComplexMul multiplies two complex matrices
 func ComplexMul(m ComplexMatrix, n ComplexMatrix) ComplexMatrix {
 	if m.Cols != n.Cols {

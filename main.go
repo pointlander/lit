@@ -67,6 +67,9 @@ func main() {
 	if *FlagMarkov {
 		markov()
 		return
+	} else if *FlagAttention && *FlagComplex {
+		markovComplexSelfEntropy()
+		return
 	} else if *FlagAttention {
 		markovSelfEntropy()
 		return
