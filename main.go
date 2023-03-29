@@ -21,6 +21,8 @@ import (
 const (
 	// Order is the order of the markov word vector model
 	Order = 9
+	// ComplexOrder is the order of the markov word complex vector model
+	ComplexOrder = 2
 	// Depth is the depth of the search
 	Depth = 2
 	// Width is the width of the probability distribution
@@ -50,6 +52,8 @@ var (
 	FlagRandom = flag.Bool("random", false, "use random books from gutenberg")
 	// FlagScale the scaling factor for the amount of samples
 	FlagScale = flag.Int("scale", 8, "the scaling factor for the amount of samples")
+	// FlagComplex complex number model
+	FlagComplex = flag.Bool("complex", false, "complex model")
 )
 
 type Result struct {
@@ -160,6 +164,96 @@ func main() {
 		for _, node := range nodes {
 			fmt.Fprintf(output, "%04x %.12f\n", node.Node, node.Rank)
 		}
+		return
+	} else if *FlagLearn && *FlagComplex {
+		var s ComplexSymbolVectors
+		if *FlagRandom {
+			s = NewComplexSymbolVectorsRandom()
+		} else {
+			s = NewComplexSymbolVectors()
+		}
+
+		fmt.Println("done building")
+		db, err := bolt.Open("complex_model.bolt", 0666, nil)
+		if err != nil {
+			panic(err)
+		}
+		defer db.Close()
+		db.Update(func(tx *bolt.Tx) error {
+			_, err := tx.CreateBucket([]byte("markov"))
+			if err != nil {
+				panic(err)
+			}
+			return nil
+		})
+		fmt.Println("write file")
+		type Pair struct {
+			Key   []byte
+			Value []byte
+		}
+		length, count, i, pairs := len(s), 0, 0, [1024]Pair{}
+		for key, value := range s {
+			k := make([]byte, len(key))
+			copy(k, key[:])
+			pairs[i].Key = k
+			index, data := 0, make([]byte, 8*Width)
+			for _, v := range value {
+				r := math.Float32bits(float32(real(complex128(v))))
+				data[index] = byte(r & 0xff)
+				index++
+				data[index] = byte((r >> 8) & 0xff)
+				index++
+				data[index] = byte((r >> 16) & 0xff)
+				index++
+				data[index] = byte((r >> 24) & 0xff)
+				index++
+
+				i := math.Float32bits(float32(imag(complex128(v))))
+				data[index] = byte(i & 0xff)
+				index++
+				data[index] = byte((i >> 8) & 0xff)
+				index++
+				data[index] = byte((i >> 16) & 0xff)
+				index++
+				data[index] = byte((i >> 24) & 0xff)
+				index++
+			}
+			pairs[i].Value = data
+			delete(s, key)
+			i++
+			count++
+			if i == len(pairs) {
+				db.Update(func(tx *bolt.Tx) error {
+					b := tx.Bucket([]byte("markov"))
+					for _, pair := range pairs {
+						buffer := bytes.Buffer{}
+						compress.Mark1Compress1(pair.Value, &buffer)
+						err := b.Put(pair.Key, buffer.Bytes())
+						if err != nil {
+							return err
+						}
+					}
+					return nil
+				})
+				i = 0
+				fmt.Printf("%f\n", float64(count)/float64(length))
+			}
+		}
+		if i > 0 {
+			db.Update(func(tx *bolt.Tx) error {
+				b := tx.Bucket([]byte("markov"))
+				for _, pair := range pairs[:i] {
+					buffer := bytes.Buffer{}
+					compress.Mark1Compress1(pair.Value, &buffer)
+					err := b.Put(pair.Key, buffer.Bytes())
+					if err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		}
+		fmt.Println("done writing file")
 		return
 	} else if *FlagLearn {
 		var s SymbolVectors
