@@ -20,13 +20,13 @@ import (
 
 const (
 	// Order is the order of the markov word vector model
-	Order = 3
+	Order = 6
 	// ComplexOrder is the order of the markov word complex vector model
 	ComplexOrder = 2
 	// Depth is the depth of the search
 	Depth = 2
 	// Width is the width of the probability distribution
-	Width = 6 * 256
+	Width = 2 * 256
 )
 
 var (
