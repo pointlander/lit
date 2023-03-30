@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"math/bits"
 	"math/rand"
 	"path/filepath"
 	"runtime"
@@ -25,7 +26,7 @@ import (
 type Symbols [Order]uint8
 
 // SymbolVectors are markov symbol vectors
-type SymbolVectors map[Symbols]map[byte]uint16
+type SymbolVectors map[Symbols]map[uint64]uint16
 
 // NewSymbolVectors makes new markov symbol vector model
 func NewSymbolVectors() SymbolVectors {
@@ -109,8 +110,9 @@ func NewSymbolVectorsRandom() SymbolVectors {
 
 // Learn learns a markov model from data
 func (s SymbolVectors) Learn(data []byte) {
+	const Max = (1 << 5)
 	var symbols Symbols
-	for i, symbol := range data[:len(data)-Order+1] {
+	for i, symbol := range data[:len(data)-Max+1] {
 		for j := 0; j < Order-1; j++ {
 			symbols := symbols
 			for k := 0; k < j; k++ {
@@ -118,24 +120,25 @@ func (s SymbolVectors) Learn(data []byte) {
 			}
 			vector := s[symbols]
 			if vector == nil {
-				vector = make(map[byte]uint16, 1)
+				vector = make(map[uint64]uint16, 1)
 			}
-			if vector[symbol] < math.MaxUint16 {
-				vector[symbol]++
+			if vector[uint64(symbol)] < math.MaxUint16 {
+				vector[uint64(symbol)]++
 			} else {
 				for key, value := range vector {
 					vector[key] = value >> 1
 				}
-				vector[symbol]++
+				vector[uint64(symbol)]++
 			}
-			for j := 1; j < Order; j++ {
-				if vector[data[i+j]] < math.MaxUint16 {
-					vector[data[i+j]]++
+			for j := 1; j < Max; j++ {
+				offset := uint64(64-bits.LeadingZeros64(uint64(j))) * 256
+				if vector[offset+uint64(data[i+j])] < math.MaxUint16 {
+					vector[offset+uint64(data[i+j])]++
 				} else {
 					for key, value := range vector {
 						vector[key] = value >> 1
 					}
-					vector[data[i+j]]++
+					vector[offset+uint64(data[i+j])]++
 				}
 			}
 			s[symbols] = vector
