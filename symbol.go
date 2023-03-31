@@ -341,7 +341,8 @@ func MarkovProbability(db *bolt.DB, input []byte) (ax []float64) {
 func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 	rnd := rand.New(rand.NewSource(1))
 	length := len(input)
-	weights := NewMatrix(0, 256, 2*(length-Order+1))
+	weights := NewMatrix(0, 256, (length - Order + 1))
+	hmm := NewMatrix(0, 256, (length - Order + 1))
 	orders := make([]int, length-Order+1)
 	for i := 0; i < length-Order+1; i++ {
 		symbol := Symbols{}
@@ -376,19 +377,29 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 		a, b := decoded[:256], decoded[256:]
 		if !found {
 			orders[i] = Order - 1
-			for j := 0; j < 2; j++ {
-				vector, sum := make([]float64, 256), float64(0.0)
-				for key := range vector {
-					v := rnd.Float64()
-					sum += v * v
-					vector[key] = v
-				}
-				length := math.Sqrt(sum)
-				for i, v := range vector {
-					vector[i] = v / length
-				}
-				weights.Data = append(weights.Data, vector...)
+			vector, sum := make([]float64, 256), float64(0.0)
+			for key := range vector {
+				v := rnd.Float64()
+				sum += v * v
+				vector[key] = v
 			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			weights.Data = append(weights.Data, vector...)
+
+			vector, sum = make([]float64, 256), float64(0.0)
+			for key := range vector {
+				v := rnd.Float64()
+				sum += v * v
+				vector[key] = v
+			}
+			length = math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			hmm.Data = append(hmm.Data, vector...)
 		} else {
 			orders[i] = order
 			vector, sum := make([]float64, 256), float64(0.0)
@@ -419,18 +430,18 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 			for i, v := range vector {
 				vector[i] = v / length
 			}
-			weights.Data = append(weights.Data, vector...)
+			hmm.Data = append(hmm.Data, vector...)
 		}
 	}
 
 	importance := NewMatrix(0, len(orders), 1)
 	for _, order := range orders {
 		importance.Data = append(importance.Data, 1/float64(Order-order))
-		importance.Data = append(importance.Data, 1/float64(Order-order))
 	}
 
 	entropy := make([]float64, 1)
 	entropy[0] = SelfEntropyKernel(weights, weights, weights, importance)
+	entropy[0] += SelfEntropyKernel(hmm, hmm, hmm, importance)
 
 	return entropy
 }
