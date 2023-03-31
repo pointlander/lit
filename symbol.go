@@ -110,7 +110,10 @@ func NewSymbolVectorsRandom() SymbolVectors {
 // Learn learns a markov model from data
 func (s SymbolVectors) Learn(data []byte) {
 	var symbols Symbols
-	for i, symbol := range data[:len(data)-Order+1] {
+	if len(data) < 32 {
+		return
+	}
+	for i, symbol := range data[:len(data)-32+1] {
 		for j := 0; j < Order-1; j++ {
 			symbols := symbols
 			for k := 0; k < j; k++ {
@@ -120,28 +123,53 @@ func (s SymbolVectors) Learn(data []byte) {
 			if vector == nil {
 				vector = make(map[uint64]uint16, 1)
 			}
+
 			if vector[uint64(symbol)] < math.MaxUint16 {
 				vector[uint64(symbol)] += 1
 			} else {
 				for key, value := range vector {
-					vector[key] = value >> 1
+					if key < 256 {
+						vector[key] = value >> 1
+					}
 				}
 				vector[uint64(symbol)] += 1
 			}
 			for j := 1; j < Order; j++ {
-				offset := uint64(0)
-				if j >= Order/2 {
-					offset = 256
-				}
-				if vector[offset+uint64(data[i+j])] < math.MaxUint16 {
-					vector[offset+uint64(data[i+j])] += 1
+				if vector[uint64(data[i+j])] < math.MaxUint16 {
+					vector[uint64(data[i+j])] += 1
 				} else {
 					for key, value := range vector {
-						vector[key] = value >> 1
+						if key < 256 {
+							vector[key] = value >> 1
+						}
 					}
-					vector[offset+uint64(data[i+j])] += 1
+					vector[uint64(data[i+j])] += 1
 				}
 			}
+
+			if vector[256+uint64(symbol)] < math.MaxUint16 {
+				vector[256+uint64(symbol)] += 1
+			} else {
+				for key, value := range vector {
+					if key >= 256 {
+						vector[key] = value >> 1
+					}
+				}
+				vector[256+uint64(symbol)] += 1
+			}
+			for j := 1; j < 32; j++ {
+				if vector[256+uint64(data[i+j])] < math.MaxUint16 {
+					vector[256+uint64(data[i+j])] += 1
+				} else {
+					for key, value := range vector {
+						if key >= 256 {
+							vector[key] = value >> 1
+						}
+					}
+					vector[256+uint64(data[i+j])] += 1
+				}
+			}
+
 			s[symbols] = vector
 		}
 		for i, value := range symbols[1:] {
@@ -313,7 +341,7 @@ func MarkovProbability(db *bolt.DB, input []byte) (ax []float64) {
 func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 	rnd := rand.New(rand.NewSource(1))
 	length := len(input)
-	weights := NewMatrix(0, Width, length-Order+1)
+	weights := NewMatrix(0, 256, 2*(length-Order+1))
 	orders := make([]int, length-Order+1)
 	for i := 0; i < length-Order+1; i++ {
 		symbol := Symbols{}
@@ -345,23 +373,26 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 			}
 			return nil
 		})
+		a, b := decoded[:256], decoded[256:]
 		if !found {
 			orders[i] = Order - 1
-			vector, sum := make([]float64, Width), float64(0.0)
-			for key := range vector {
-				v := rnd.Float64()
-				sum += v * v
-				vector[key] = v
+			for j := 0; j < 2; j++ {
+				vector, sum := make([]float64, 256), float64(0.0)
+				for key := range vector {
+					v := rnd.Float64()
+					sum += v * v
+					vector[key] = v
+				}
+				length := math.Sqrt(sum)
+				for i, v := range vector {
+					vector[i] = v / length
+				}
+				weights.Data = append(weights.Data, vector...)
 			}
-			length := math.Sqrt(sum)
-			for i, v := range vector {
-				vector[i] = v / length
-			}
-			weights.Data = append(weights.Data, vector...)
 		} else {
 			orders[i] = order
-			vector, sum := make([]float64, Width), float64(0.0)
-			for key, value := range decoded {
+			vector, sum := make([]float64, 256), float64(0.0)
+			for key, value := range a {
 				if value == math.MaxUint16 {
 					fmt.Println("max value")
 				}
@@ -374,11 +405,27 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 				vector[i] = v / length
 			}
 			weights.Data = append(weights.Data, vector...)
+
+			vector, sum = make([]float64, 256), float64(0.0)
+			for key, value := range b {
+				if value == math.MaxUint16 {
+					fmt.Println("max value")
+				}
+				v := float64(value)
+				sum += v * v
+				vector[key] = v
+			}
+			length = math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			weights.Data = append(weights.Data, vector...)
 		}
 	}
 
 	importance := NewMatrix(0, len(orders), 1)
 	for _, order := range orders {
+		importance.Data = append(importance.Data, 1/float64(Order-order))
 		importance.Data = append(importance.Data, 1/float64(Order-order))
 	}
 
