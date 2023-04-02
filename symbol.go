@@ -313,9 +313,9 @@ func MarkovProbability(db *bolt.DB, input []byte) (ax []float64) {
 			orders[i] = Order - order
 			vector, sum := make([]float64, Width), float64(0.0)
 			for key, value := range decoded {
-				if value == math.MaxUint16 {
+				/*if value == math.MaxUint16 {
 					fmt.Println("max value")
-				}
+				}*/
 				v := float64(value)
 				sum += v * v
 				vector[key] = v
@@ -407,9 +407,9 @@ func SelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 			orders[i] = order
 			vector, sum := make([]float64, 256), float64(0.0)
 			for key, value := range a {
-				if value == math.MaxUint16 {
+				/*if value == math.MaxUint16 {
 					fmt.Println("max value")
-				}
+				}*/
 				v := float64(value)
 				sum += v * v
 				vector[key] = v
@@ -422,9 +422,9 @@ func SelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 
 			vector, sum = make([]float64, 256), float64(0.0)
 			for key, value := range b {
-				if value == math.MaxUint16 {
+				/*if value == math.MaxUint16 {
 					fmt.Println("max value")
-				}
+				}*/
 				v := float64(value)
 				sum += v * v
 				vector[key] = v
@@ -502,9 +502,9 @@ func SelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 
 			vector, sum := make([]float64, 256), float64(0.0)
 			for key, value := range b {
-				if value == math.MaxUint16 {
+				/*if value == math.MaxUint16 {
 					fmt.Println("max value")
-				}
+				}*/
 				v := float64(value)
 				sum += v * v
 				vector[key] = v

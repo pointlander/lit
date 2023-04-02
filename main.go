@@ -20,7 +20,7 @@ import (
 
 const (
 	// Order is the order of the markov word vector model
-	Order = 6
+	Order = 7
 	// ComplexOrder is the order of the markov word complex vector model
 	ComplexOrder = 2
 	// Depth is the depth of the search
