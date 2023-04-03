@@ -15,7 +15,6 @@ type Node struct {
 	F, B  *Node
 	Value []uint16
 	Key   Symbols
-	Seen  bool
 }
 
 // LRU is a least recently used cache
