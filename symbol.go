@@ -28,8 +28,8 @@ type Symbols [Order]uint8
 type SymbolVectors map[Symbols]map[uint64]uint16
 
 // NewSymbolVectors makes new markov symbol vector model
-func NewSymbolVectors() SymbolVectors {
-	vectors := make(SymbolVectors)
+func NewSymbolVectors() LRU {
+	vectors := NewLRU(1024 * 1024)
 	data, err := filepath.Abs(*FlagData)
 	if err != nil {
 		panic(err)
@@ -49,7 +49,7 @@ func NewSymbolVectors() SymbolVectors {
 			}
 			plain := html2text.HTML2Text(string(html))
 			runtime.ReadMemStats(&m)
-			fmt.Printf("%5d %20d %s\n", m.Alloc/(1024*1024), len(vectors), url)
+			fmt.Printf("%5d %5d %20d %s\n", i, m.Alloc/(1024*1024), len(vectors.Model), url)
 			vectors.Learn([]byte(plain))
 			if i%100 == 0 {
 				runtime.GC()
@@ -62,9 +62,9 @@ func NewSymbolVectors() SymbolVectors {
 }
 
 // NewSymbolVectorsRandom makes new markov symbol vector model
-func NewSymbolVectorsRandom() SymbolVectors {
+func NewSymbolVectorsRandom() LRU {
 	rnd := rand.New(rand.NewSource(1))
-	vectors := make(SymbolVectors)
+	vectors := NewLRU(1024 * 1024)
 	data, err := filepath.Abs(*FlagData)
 	if err != nil {
 		panic(err)
@@ -92,7 +92,7 @@ func NewSymbolVectorsRandom() SymbolVectors {
 			}
 			plain := html2text.HTML2Text(string(html))
 			runtime.ReadMemStats(&m)
-			fmt.Printf("%5d %20d %s\n", m.Alloc/(1024*1024), len(vectors), url)
+			fmt.Printf("%5d %5d %20d %s\n", i, m.Alloc/(1024*1024), len(vectors.Model), url)
 			vectors.Learn([]byte(plain))
 			if i%100 == 0 {
 				runtime.GC()
@@ -108,7 +108,7 @@ func NewSymbolVectorsRandom() SymbolVectors {
 }
 
 // Learn learns a markov model from data
-func (s SymbolVectors) Learn(data []byte) {
+func (s *LRU) Learn(data []byte) {
 	var symbols Symbols
 	if len(data) < 32 {
 		return
@@ -119,11 +119,8 @@ func (s SymbolVectors) Learn(data []byte) {
 			for k := 0; k < j; k++ {
 				symbols[k] = 0
 			}
-			vector := s[symbols]
-			if vector == nil {
-				vector = make(map[uint64]uint16, 1)
-			}
-
+			node, _ := s.Get(symbols)
+			vector := node.Value
 			if vector[uint64(symbol)] < math.MaxUint16 {
 				vector[uint64(symbol)] += 1
 			} else {
@@ -170,7 +167,7 @@ func (s SymbolVectors) Learn(data []byte) {
 				}
 			}
 
-			s[symbols] = vector
+			s.Flush()
 		}
 		for i, value := range symbols[1:] {
 			symbols[i] = value

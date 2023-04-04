@@ -26,12 +26,12 @@ type LRU struct {
 }
 
 // NewLRU creates a new LRU cache
-func NewLRU(size uint) LRU {
+func NewLRU(size int) LRU {
 	if size == 0 {
 		panic("size should not be 0")
 	}
 	return LRU{
-		Size:  1 << size,
+		Size:  size,
 		Model: make(map[Symbols][]uint8),
 	}
 }
@@ -43,7 +43,33 @@ func (l *LRU) Flush() *Node {
 		return nil
 	}
 
+	write := func(node *Node) {
+		delete(l.Nodes, node.Key)
+		index, data := 0, make([]byte, 2*Width)
+		for _, value := range node.Value {
+			data[index] = byte(value & 0xff)
+			index++
+			data[index] = byte((value >> 8) & 0xff)
+			index++
+		}
+		buffer := bytes.Buffer{}
+		compress.Mark1Compress1(data, &buffer)
+		l.Model[node.Key] = buffer.Bytes()
+	}
 	node := l.Tail
+	write(node)
+	size >>= 1
+	for i := 1; i < size; i++ {
+		node = node.F
+		write(node)
+	}
+	node.F.B, l.Tail, node.F = nil, node.F, nil
+	return node
+}
+
+// Flush flush the oldest entries in the cache
+func (l *LRU) Close() {
+	size, node := l.Size, l.Tail
 	write := func() {
 		delete(l.Nodes, node.Key)
 		index, data := 0, make([]byte, 2*Width)
@@ -58,14 +84,10 @@ func (l *LRU) Flush() *Node {
 		l.Model[node.Key] = buffer.Bytes()
 	}
 	write()
-	size >>= 1
 	for i := 1; i < size; i++ {
 		node = node.F
 		write()
 	}
-	node.F.B, l.Tail, node.F = nil, node.F, nil
-
-	return node
 }
 
 // Get gets an entry and sets it as the most recent
@@ -97,6 +119,8 @@ func (l *LRU) Get(key Symbols) (*Node, bool) {
 			index++
 		}
 		node.Value = decoded
+	} else {
+		node.Value = make([]uint16, Width)
 	}
 	node.B, l.Head = l.Head, node
 	if length == 0 {

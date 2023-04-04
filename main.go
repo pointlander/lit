@@ -259,7 +259,7 @@ func main() {
 		fmt.Println("done writing file")
 		return
 	} else if *FlagLearn {
-		var s SymbolVectors
+		var s LRU
 		if *FlagRandom {
 			s = NewSymbolVectorsRandom()
 		} else {
@@ -284,24 +284,13 @@ func main() {
 			Key   []byte
 			Value []byte
 		}
-		length, count, i, pairs := len(s), 0, 0, [1024]Pair{}
-		for key, value := range s {
+		length, count, i, pairs := len(s.Model), 0, 0, [1024]Pair{}
+		for key, value := range s.Model {
 			k := make([]byte, len(key))
 			copy(k, key[:])
 			pairs[i].Key = k
-			v := make([]uint16, Width)
-			for key, value := range value {
-				v[key] = value
-			}
-			index, data := 0, make([]byte, 2*Width)
-			for _, value := range v {
-				data[index] = byte(value & 0xff)
-				index++
-				data[index] = byte((value >> 8) & 0xff)
-				index++
-			}
-			pairs[i].Value = data
-			delete(s, key)
+			pairs[i].Value = value
+			delete(s.Model, key)
 			i++
 			count++
 			if i == len(pairs) {
