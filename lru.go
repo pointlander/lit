@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"runtime"
 
 	"github.com/pointlander/compress"
 )
@@ -43,8 +44,12 @@ func (l *LRU) Flush() *Node {
 		return nil
 	}
 
+	type N struct {
+		Key   Symbols
+		Value []byte
+	}
+	done := make(chan N, runtime.NumCPU())
 	write := func(node *Node) {
-		delete(l.Nodes, node.Key)
 		index, data := 0, make([]byte, 2*Width)
 		for _, value := range node.Value {
 			data[index] = byte(value & 0xff)
@@ -54,14 +59,38 @@ func (l *LRU) Flush() *Node {
 		}
 		buffer := bytes.Buffer{}
 		compress.Mark1Compress1(data, &buffer)
-		l.Model[node.Key] = buffer.Bytes()
+		done <- N{
+			Key:   node.Key,
+			Value: buffer.Bytes(),
+		}
 	}
 	node := l.Tail
-	write(node)
+	delete(l.Nodes, node.Key)
+	go write(node)
 	size >>= 1
-	for i := 1; i < size; i++ {
+	n := <-done
+	l.Model[n.Key] = n.Value
+	i, j := 1, 0
+	for i < size && j < runtime.NumCPU() {
 		node = node.F
-		write(node)
+		delete(l.Nodes, node.Key)
+		go write(node)
+		i++
+		j++
+	}
+	for i < size {
+		n := <-done
+		l.Model[n.Key] = n.Value
+		j--
+		node = node.F
+		delete(l.Nodes, node.Key)
+		go write(node)
+		i++
+		j++
+	}
+	for k := 0; k < j; k++ {
+		n := <-done
+		l.Model[n.Key] = n.Value
 	}
 	node.F.B, l.Tail, node.F = nil, node.F, nil
 	return node
