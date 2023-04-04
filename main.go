@@ -265,6 +265,7 @@ func main() {
 		} else {
 			s = NewSymbolVectors()
 		}
+		s.Close()
 
 		fmt.Println("done building")
 		db, err := bolt.Open("model.bolt", 0666, nil)
