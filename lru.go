@@ -98,7 +98,7 @@ func (l *LRU) Flush() *Node {
 
 // Flush flush the oldest entries in the cache
 func (l *LRU) Close() {
-	size, node := l.Size, l.Tail
+	node := l.Tail
 	write := func() {
 		delete(l.Nodes, node.Key)
 		index, data := 0, make([]byte, 2*Width)
@@ -112,10 +112,9 @@ func (l *LRU) Close() {
 		compress.Mark1Compress1(data, &buffer)
 		l.Model[node.Key] = buffer.Bytes()
 	}
-	write()
-	for i := 1; i < size; i++ {
-		node = node.F
+	for node != nil {
 		write()
+		node = node.F
 	}
 }
 
