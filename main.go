@@ -20,13 +20,15 @@ import (
 
 const (
 	// Order is the order of the markov word vector model
-	Order = 7
+	Order = 9
 	// ComplexOrder is the order of the markov word complex vector model
 	ComplexOrder = 2
 	// Depth is the depth of the search
 	Depth = 2
+	// Size is the number of histograms
+	Size = 1
 	// Width is the width of the probability distribution
-	Width = 2 * 256
+	Width = Size * 256
 )
 
 var (
@@ -48,6 +50,8 @@ var (
 	FlagLearn = flag.Bool("learn", false, "learns a model")
 	// FlagData is the path to the training data
 	FlagData = flag.String("data", "gutenberg_en_all_2022-04.zim", "path to the training data")
+	// FlagModel is the model for inference
+	FlagModel = flag.String("model", "model.bolt", "the learned model")
 	// FlagRanom select random books from gutenberg for training
 	FlagRandom = flag.Bool("random", false, "use random books from gutenberg")
 	// FlagScale the scaling factor for the amount of samples
@@ -77,7 +81,7 @@ func main() {
 		markovSelfEntropyDiffusion()
 		return
 	} else if *FlagPageRank {
-		db, err := bolt.Open("model.bolt", 0600, nil)
+		db, err := bolt.Open(*FlagModel, 0600, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -177,7 +181,7 @@ func main() {
 		}
 
 		fmt.Println("done building")
-		db, err := bolt.Open("complex_model.bolt", 0666, nil)
+		db, err := bolt.Open(*FlagModel, 0666, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -268,7 +272,7 @@ func main() {
 		s.Close()
 
 		fmt.Println("done building")
-		db, err := bolt.Open("model.bolt", 0666, nil)
+		db, err := bolt.Open(*FlagModel, 0666, nil)
 		if err != nil {
 			panic(err)
 		}

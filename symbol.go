@@ -144,26 +144,28 @@ func (s *LRU) Learn(data []byte) {
 				}
 			}
 
-			if vector[256+uint64(symbol)] < math.MaxUint16 {
-				vector[256+uint64(symbol)] += 1
-			} else {
-				for key, value := range vector {
-					if key >= 256 {
-						vector[key] = value >> 1
-					}
-				}
-				vector[256+uint64(symbol)] += 1
-			}
-			for j := 1; j < 32; j++ {
-				if vector[256+uint64(data[i+j])] < math.MaxUint16 {
-					vector[256+uint64(data[i+j])] += 1
+			if Size == 2 {
+				if vector[256+uint64(symbol)] < math.MaxUint16 {
+					vector[256+uint64(symbol)] += 1
 				} else {
 					for key, value := range vector {
 						if key >= 256 {
 							vector[key] = value >> 1
 						}
 					}
-					vector[256+uint64(data[i+j])] += 1
+					vector[256+uint64(symbol)] += 1
+				}
+				for j := 1; j < 32; j++ {
+					if vector[256+uint64(data[i+j])] < math.MaxUint16 {
+						vector[256+uint64(data[i+j])] += 1
+					} else {
+						for key, value := range vector {
+							if key >= 256 {
+								vector[key] = value >> 1
+							}
+						}
+						vector[256+uint64(data[i+j])] += 1
+					}
 				}
 			}
 
@@ -374,7 +376,11 @@ func SelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 			}
 			return nil
 		})
-		a, b := decoded[:256], decoded[256:]
+		a := decoded[:256]
+		var b []uint16
+		if Size == 2 {
+			b = decoded[256:]
+		}
 		if !found {
 			orders[i] = Order - 1
 			vector, sum := make([]float64, 256), float64(0.0)
@@ -389,17 +395,19 @@ func SelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 			}
 			weights.Data = append(weights.Data, vector...)
 
-			vector, sum = make([]float64, 256), float64(0.0)
-			for key := range vector {
-				v := rnd.Float64()
-				sum += v * v
-				vector[key] = v
+			if Size == 2 {
+				vector, sum = make([]float64, 256), float64(0.0)
+				for key := range vector {
+					v := rnd.Float64()
+					sum += v * v
+					vector[key] = v
+				}
+				length = math.Sqrt(sum)
+				for i, v := range vector {
+					vector[i] = v / length
+				}
+				hmm.Data = append(hmm.Data, vector...)
 			}
-			length = math.Sqrt(sum)
-			for i, v := range vector {
-				vector[i] = v / length
-			}
-			hmm.Data = append(hmm.Data, vector...)
 		} else {
 			orders[i] = order
 			vector, sum := make([]float64, 256), float64(0.0)
@@ -417,20 +425,22 @@ func SelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 			}
 			weights.Data = append(weights.Data, vector...)
 
-			vector, sum = make([]float64, 256), float64(0.0)
-			for key, value := range b {
-				/*if value == math.MaxUint16 {
-					fmt.Println("max value")
-				}*/
-				v := float64(value)
-				sum += v * v
-				vector[key] = v
+			if Size == 2 {
+				vector, sum = make([]float64, 256), float64(0.0)
+				for key, value := range b {
+					/*if value == math.MaxUint16 {
+						fmt.Println("max value")
+					}*/
+					v := float64(value)
+					sum += v * v
+					vector[key] = v
+				}
+				length = math.Sqrt(sum)
+				for i, v := range vector {
+					vector[i] = v / length
+				}
+				hmm.Data = append(hmm.Data, vector...)
 			}
-			length = math.Sqrt(sum)
-			for i, v := range vector {
-				vector[i] = v / length
-			}
-			hmm.Data = append(hmm.Data, vector...)
 		}
 	}
 
@@ -443,7 +453,9 @@ func SelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 	entropy[0] = SelfEntropyKernel(weights, weights, weights, importance)
 
 	if len(context) == 0 {
-		entropy[0] += SelfEntropyKernel(hmm, hmm, hmm, importance)
+		if Size == 2 {
+			entropy[0] += SelfEntropyKernel(hmm, hmm, hmm, importance)
+		}
 		return entropy
 	}
 
@@ -571,7 +583,7 @@ func split(pathes []Result) int {
 }
 
 func markov() {
-	db, err := bolt.Open("model.bolt", 0600, nil)
+	db, err := bolt.Open(*FlagModel, 0600, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -642,7 +654,7 @@ func markov() {
 }
 
 func markovSelfEntropy() {
-	db, err := bolt.Open("model.bolt", 0600, nil)
+	db, err := bolt.Open(*FlagModel, 0600, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -717,7 +729,7 @@ func markovSelfEntropy() {
 func markovSelfEntropyDiffusion() {
 	rnd := rand.New(rand.NewSource(1))
 
-	db, err := bolt.Open("model.bolt", 0600, nil)
+	db, err := bolt.Open(*FlagModel, 0600, nil)
 	if err != nil {
 		panic(err)
 	}
