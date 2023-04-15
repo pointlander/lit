@@ -25,11 +25,11 @@ import (
 type Symbols [Order]uint8
 
 // SymbolVectors are markov symbol vectors
-type SymbolVectors map[Symbols]map[byte]uint16
+type SymbolVectors map[Symbols]map[uint64]uint16
 
 // NewSymbolVectors makes new markov symbol vector model
-func NewSymbolVectors() SymbolVectors {
-	vectors := make(SymbolVectors)
+func NewSymbolVectors() LRU {
+	vectors := NewLRU(1024 * 1024)
 	data, err := filepath.Abs(*FlagData)
 	if err != nil {
 		panic(err)
@@ -49,7 +49,7 @@ func NewSymbolVectors() SymbolVectors {
 			}
 			plain := html2text.HTML2Text(string(html))
 			runtime.ReadMemStats(&m)
-			fmt.Printf("%5d %20d %s\n", m.Alloc/(1024*1024), len(vectors), url)
+			fmt.Printf("%5d %5d %20d %s\n", i, m.Alloc/(1024*1024), len(vectors.Model), url)
 			vectors.Learn([]byte(plain))
 			if i%100 == 0 {
 				runtime.GC()
@@ -62,9 +62,9 @@ func NewSymbolVectors() SymbolVectors {
 }
 
 // NewSymbolVectorsRandom makes new markov symbol vector model
-func NewSymbolVectorsRandom() SymbolVectors {
+func NewSymbolVectorsRandom() LRU {
 	rnd := rand.New(rand.NewSource(1))
-	vectors := make(SymbolVectors)
+	vectors := NewLRU(1024 * 1024)
 	data, err := filepath.Abs(*FlagData)
 	if err != nil {
 		panic(err)
@@ -92,7 +92,7 @@ func NewSymbolVectorsRandom() SymbolVectors {
 			}
 			plain := html2text.HTML2Text(string(html))
 			runtime.ReadMemStats(&m)
-			fmt.Printf("%5d %20d %s\n", m.Alloc/(1024*1024), len(vectors), url)
+			fmt.Printf("%5d %5d %20d %s\n", i, m.Alloc/(1024*1024), len(vectors.Model), url)
 			vectors.Learn([]byte(plain))
 			if i%100 == 0 {
 				runtime.GC()
@@ -108,37 +108,68 @@ func NewSymbolVectorsRandom() SymbolVectors {
 }
 
 // Learn learns a markov model from data
-func (s SymbolVectors) Learn(data []byte) {
+func (s *LRU) Learn(data []byte) {
 	var symbols Symbols
-	for i, symbol := range data[:len(data)-Order+1] {
+	if len(data) < 32 {
+		return
+	}
+	for i, symbol := range data[:len(data)-32+1] {
 		for j := 0; j < Order-1; j++ {
 			symbols := symbols
 			for k := 0; k < j; k++ {
 				symbols[k] = 0
 			}
-			vector := s[symbols]
-			if vector == nil {
-				vector = make(map[byte]uint16, 1)
-			}
-			if vector[symbol] < math.MaxUint16 {
-				vector[symbol]++
+			node, _ := s.Get(symbols)
+			vector := node.Value
+			if vector[uint64(symbol)] < math.MaxUint16 {
+				vector[uint64(symbol)] += 1
 			} else {
 				for key, value := range vector {
-					vector[key] = value >> 1
-				}
-				vector[symbol]++
-			}
-			for j := 1; j < Order; j++ {
-				if vector[data[i+j]] < math.MaxUint16 {
-					vector[data[i+j]]++
-				} else {
-					for key, value := range vector {
+					if key < 256 {
 						vector[key] = value >> 1
 					}
-					vector[data[i+j]]++
+				}
+				vector[uint64(symbol)] += 1
+			}
+			for j := 1; j < Order; j++ {
+				if vector[uint64(data[i+j])] < math.MaxUint16 {
+					vector[uint64(data[i+j])] += 1
+				} else {
+					for key, value := range vector {
+						if key < 256 {
+							vector[key] = value >> 1
+						}
+					}
+					vector[uint64(data[i+j])] += 1
 				}
 			}
-			s[symbols] = vector
+
+			if Size == 2 {
+				if vector[256+uint64(symbol)] < math.MaxUint16 {
+					vector[256+uint64(symbol)] += 1
+				} else {
+					for key, value := range vector {
+						if key >= 256 {
+							vector[key] = value >> 1
+						}
+					}
+					vector[256+uint64(symbol)] += 1
+				}
+				for j := 1; j < 32; j++ {
+					if vector[256+uint64(data[i+j])] < math.MaxUint16 {
+						vector[256+uint64(data[i+j])] += 1
+					} else {
+						for key, value := range vector {
+							if key >= 256 {
+								vector[key] = value >> 1
+							}
+						}
+						vector[256+uint64(data[i+j])] += 1
+					}
+				}
+			}
+
+			s.Flush()
 		}
 		for i, value := range symbols[1:] {
 			symbols[i] = value
@@ -281,9 +312,9 @@ func MarkovProbability(db *bolt.DB, input []byte) (ax []float64) {
 			orders[i] = Order - order
 			vector, sum := make([]float64, Width), float64(0.0)
 			for key, value := range decoded {
-				if value == math.MaxUint16 {
+				/*if value == math.MaxUint16 {
 					fmt.Println("max value")
-				}
+				}*/
 				v := float64(value)
 				sum += v * v
 				vector[key] = v
@@ -306,10 +337,14 @@ func MarkovProbability(db *bolt.DB, input []byte) (ax []float64) {
 }
 
 // SelfEntropy calculates entropy
-func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
+func SelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 	rnd := rand.New(rand.NewSource(1))
 	length := len(input)
-	weights := NewMatrix(0, Width, length-Order+1)
+	weights := NewMatrix(0, 256, (length - Order + 1))
+	hmm := NewMatrix(0, 256, (length - Order + 1))
+	if len(context) > 0 {
+		hmm = NewMatrix(0, 256, (length-Order+1)+(len(context)-Order+1))
+	}
 	orders := make([]int, length-Order+1)
 	for i := 0; i < length-Order+1; i++ {
 		symbol := Symbols{}
@@ -341,9 +376,14 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 			}
 			return nil
 		})
+		a := decoded[:256]
+		var b []uint16
+		if Size == 2 {
+			b = decoded[256:]
+		}
 		if !found {
 			orders[i] = Order - 1
-			vector, sum := make([]float64, Width), float64(0.0)
+			vector, sum := make([]float64, 256), float64(0.0)
 			for key := range vector {
 				v := rnd.Float64()
 				sum += v * v
@@ -354,13 +394,27 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 				vector[i] = v / length
 			}
 			weights.Data = append(weights.Data, vector...)
+
+			if Size == 2 {
+				vector, sum = make([]float64, 256), float64(0.0)
+				for key := range vector {
+					v := rnd.Float64()
+					sum += v * v
+					vector[key] = v
+				}
+				length = math.Sqrt(sum)
+				for i, v := range vector {
+					vector[i] = v / length
+				}
+				hmm.Data = append(hmm.Data, vector...)
+			}
 		} else {
 			orders[i] = order
-			vector, sum := make([]float64, Width), float64(0.0)
-			for key, value := range decoded {
-				if value == math.MaxUint16 {
+			vector, sum := make([]float64, 256), float64(0.0)
+			for key, value := range a {
+				/*if value == math.MaxUint16 {
 					fmt.Println("max value")
-				}
+				}*/
 				v := float64(value)
 				sum += v * v
 				vector[key] = v
@@ -370,6 +424,23 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 				vector[i] = v / length
 			}
 			weights.Data = append(weights.Data, vector...)
+
+			if Size == 2 {
+				vector, sum = make([]float64, 256), float64(0.0)
+				for key, value := range b {
+					/*if value == math.MaxUint16 {
+						fmt.Println("max value")
+					}*/
+					v := float64(value)
+					sum += v * v
+					vector[key] = v
+				}
+				length = math.Sqrt(sum)
+				for i, v := range vector {
+					vector[i] = v / length
+				}
+				hmm.Data = append(hmm.Data, vector...)
+			}
 		}
 	}
 
@@ -381,6 +452,88 @@ func SelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 	entropy := make([]float64, 1)
 	entropy[0] = SelfEntropyKernel(weights, weights, weights, importance)
 
+	if len(context) == 0 {
+		if Size == 2 {
+			entropy[0] += SelfEntropyKernel(hmm, hmm, hmm, importance)
+		}
+		return entropy
+	}
+
+	length = len(context)
+	ordersHMM := make([]int, length-Order+1)
+	for i := 0; i < length-Order+1; i++ {
+		symbol := Symbols{}
+		for j := range symbol {
+			symbol[j] = input[i+j]
+		}
+		var decoded [Width]uint16
+		found, order := false, 0
+		db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("markov"))
+			for j := 0; j < Order-1; j++ {
+				symbol := symbol
+				for k := 0; k < j; k++ {
+					symbol[k] = 0
+				}
+				v := b.Get(symbol[:])
+				if v != nil {
+					found, order = true, j
+					index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 2*Width)
+					compress.Mark1Decompress1(buffer, output)
+					for key := range decoded {
+						decoded[key] = uint16(output[index])
+						index++
+						decoded[key] |= uint16(output[index]) << 8
+						index++
+					}
+					return nil
+				}
+			}
+			return nil
+		})
+		b := decoded[256:]
+		if !found {
+			ordersHMM[i] = Order - 1
+
+			vector, sum := make([]float64, 256), float64(0.0)
+			for key := range vector {
+				v := rnd.Float64()
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			hmm.Data = append(hmm.Data, vector...)
+		} else {
+			ordersHMM[i] = order
+
+			vector, sum := make([]float64, 256), float64(0.0)
+			for key, value := range b {
+				/*if value == math.MaxUint16 {
+					fmt.Println("max value")
+				}*/
+				v := float64(value)
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			hmm.Data = append(hmm.Data, vector...)
+		}
+	}
+
+	importance = NewMatrix(0, len(orders)+len(ordersHMM), 1)
+	for _, order := range orders {
+		importance.Data = append(importance.Data, 1/float64(Order-order))
+	}
+	for _, order := range ordersHMM {
+		importance.Data = append(importance.Data, 1/float64(Order-order))
+	}
+	entropy[0] += SelfEntropyKernel(hmm, hmm, hmm, importance)
 	return entropy
 }
 
@@ -430,7 +583,7 @@ func split(pathes []Result) int {
 }
 
 func markov() {
-	db, err := bolt.Open("model.bolt", 0600, nil)
+	db, err := bolt.Open(*FlagModel, 0600, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -501,7 +654,7 @@ func markov() {
 }
 
 func markovSelfEntropy() {
-	db, err := bolt.Open("model.bolt", 0600, nil)
+	db, err := bolt.Open(*FlagModel, 0600, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -517,7 +670,7 @@ func markovSelfEntropy() {
 			n = append(n, byte(i))
 			pathes[i].Output = n
 			total := 0.0
-			entropy := SelfEntropy(db, n)
+			entropy := SelfEntropy(db, n, nil)
 			for _, value := range entropy {
 				total += value
 			}
@@ -576,7 +729,7 @@ func markovSelfEntropy() {
 func markovSelfEntropyDiffusion() {
 	rnd := rand.New(rand.NewSource(1))
 
-	db, err := bolt.Open("model.bolt", 0600, nil)
+	db, err := bolt.Open(*FlagModel, 0600, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -599,7 +752,7 @@ func markovSelfEntropyDiffusion() {
 			n[idx] = byte(i)
 			pathes[i].Output = n
 			total := 0.0
-			entropy := SelfEntropy(db, n)
+			entropy := SelfEntropy(db, n, []byte(*FlagInput))
 			for _, value := range entropy {
 				total += value
 			}

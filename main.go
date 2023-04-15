@@ -25,8 +25,10 @@ const (
 	ComplexOrder = 2
 	// Depth is the depth of the search
 	Depth = 2
+	// Size is the number of histograms
+	Size = 1
 	// Width is the width of the probability distribution
-	Width = 256
+	Width = Size * 256
 )
 
 var (
@@ -48,6 +50,8 @@ var (
 	FlagLearn = flag.Bool("learn", false, "learns a model")
 	// FlagData is the path to the training data
 	FlagData = flag.String("data", "gutenberg_en_all_2022-04.zim", "path to the training data")
+	// FlagModel is the model for inference
+	FlagModel = flag.String("model", "model.bolt", "the learned model")
 	// FlagRanom select random books from gutenberg for training
 	FlagRandom = flag.Bool("random", false, "use random books from gutenberg")
 	// FlagScale the scaling factor for the amount of samples
@@ -77,7 +81,7 @@ func main() {
 		markovSelfEntropyDiffusion()
 		return
 	} else if *FlagPageRank {
-		db, err := bolt.Open("model.bolt", 0600, nil)
+		db, err := bolt.Open(*FlagModel, 0600, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -177,7 +181,7 @@ func main() {
 		}
 
 		fmt.Println("done building")
-		db, err := bolt.Open("complex_model.bolt", 0666, nil)
+		db, err := bolt.Open(*FlagModel, 0666, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -259,15 +263,16 @@ func main() {
 		fmt.Println("done writing file")
 		return
 	} else if *FlagLearn {
-		var s SymbolVectors
+		var s LRU
 		if *FlagRandom {
 			s = NewSymbolVectorsRandom()
 		} else {
 			s = NewSymbolVectors()
 		}
+		s.Close()
 
 		fmt.Println("done building")
-		db, err := bolt.Open("model.bolt", 0666, nil)
+		db, err := bolt.Open(*FlagModel, 0666, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -284,24 +289,13 @@ func main() {
 			Key   []byte
 			Value []byte
 		}
-		length, count, i, pairs := len(s), 0, 0, [1024]Pair{}
-		for key, value := range s {
+		length, count, i, pairs := len(s.Model), 0, 0, [1024]Pair{}
+		for key, value := range s.Model {
 			k := make([]byte, len(key))
 			copy(k, key[:])
 			pairs[i].Key = k
-			v := make([]uint16, Width)
-			for key, value := range value {
-				v[key] = value
-			}
-			index, data := 0, make([]byte, 2*Width)
-			for _, value := range v {
-				data[index] = byte(value & 0xff)
-				index++
-				data[index] = byte((value >> 8) & 0xff)
-				index++
-			}
-			pairs[i].Value = data
-			delete(s, key)
+			pairs[i].Value = value
+			delete(s.Model, key)
 			i++
 			count++
 			if i == len(pairs) {

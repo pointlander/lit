@@ -244,7 +244,7 @@ func ComplexSelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 }
 
 func markovComplexSelfEntropy() {
-	db, err := bolt.Open("complex_model.bolt", 0600, nil)
+	db, err := bolt.Open(*FlagModel, 0600, nil)
 	if err != nil {
 		panic(err)
 	}
