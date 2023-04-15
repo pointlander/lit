@@ -52,6 +52,8 @@ var (
 	FlagData = flag.String("data", "gutenberg_en_all_2022-04.zim", "path to the training data")
 	// FlagModel is the model for inference
 	FlagModel = flag.String("model", "model.bolt", "the learned model")
+	// FlagEntropy calculate the self entropy of a string
+	FlagEntropy = flag.String("entropy", "", "calculate the self entropy of a string")
 	// FlagRanom select random books from gutenberg for training
 	FlagRandom = flag.Bool("random", false, "use random books from gutenberg")
 	// FlagScale the scaling factor for the amount of samples
@@ -334,6 +336,17 @@ func main() {
 	} else if *FlagSquare {
 		s := NewSquareRandom()
 		_ = s
+		return
+	} else if *FlagEntropy != "" {
+		db, err := bolt.Open(*FlagModel, 0600, nil)
+		if err != nil {
+			panic(err)
+		}
+		defer db.Close()
+
+		input := []byte(*FlagEntropy)
+		entropy := SelfEntropy(db, input, nil)
+		fmt.Println(entropy[0] / float64(len(input)))
 		return
 	}
 
