@@ -235,7 +235,7 @@ func (s Square) Learn(data []byte) {
 	for i := 5; i < len(data)-4; i++ {
 		index := (uint16(data[i-1]) << 8) | uint16(data[i])
 		for j := -4; j < -1; j++ {
-			a := (uint16(data[i-1-j]) << 8) | uint16(data[i-j])
+			a := (uint16(data[i-1+j]) << 8) | uint16(data[i+j])
 			if s[index][a] == math.MaxUint16 {
 				for k := range s[index] {
 					s[index][k] >>= 1
