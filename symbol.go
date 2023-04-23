@@ -231,7 +231,7 @@ func NewSquareRandom() *Square {
 }
 
 // Learn learns a square markov model from data
-func (s Square) Learn(data []byte) {
+func (s *Square) Learn(data []byte) {
 	for i := 5; i < len(data)-4; i++ {
 		index := (uint16(data[i-1]) << 8) | uint16(data[i])
 		for j := -4; j < -1; j++ {
@@ -266,6 +266,128 @@ func (s Square) Learn(data []byte) {
 			}
 			s[index&0xff][a]++
 		}
+	}
+}
+
+// SelfEntropy calculates entropy
+func (s *Square) SelfEntropy(input []byte) (ax []float64) {
+	rnd := rand.New(rand.NewSource(1))
+	length := len(input)
+	weights := NewMatrix(0, 256, (length - 2 + 1))
+	orders := make([]int, length-2+1)
+	for i := 0; i < length-2+1; i++ {
+		order := 2
+		a := s[(uint(input[i])<<8)|uint(input[i+1])]
+		if a == nil {
+			order = 1
+			a = s[input[i+1]]
+		}
+		if a == nil {
+			orders[i] = 2 - 1
+			vector, sum := make([]float64, 1<<16), float64(0.0)
+			for key := range vector {
+				v := rnd.Float64()
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			weights.Data = append(weights.Data, vector...)
+		} else {
+			orders[i] = order
+			vector, sum := make([]float64, 1<<16), float64(0.0)
+			for key, value := range a {
+				/*if value == math.MaxUint16 {
+					fmt.Println("max value")
+				}*/
+				v := float64(value)
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			weights.Data = append(weights.Data, vector...)
+		}
+	}
+
+	importance := NewMatrix(0, len(orders), 1)
+	for _, order := range orders {
+		importance.Data = append(importance.Data, 1/float64(Order-order))
+	}
+
+	entropy := make([]float64, 1)
+	entropy[0] = SelfEntropyKernel(weights, weights, weights, importance)
+	return entropy
+}
+
+func (s *Square) markovSelfEntropy() {
+	in := []byte(*FlagInput)
+	var search func(depth int, input []byte, done chan Result)
+	search = func(depth int, input []byte, done chan Result) {
+		pathes := make([]Result, Width)
+		for i := 0; i < Width; i++ {
+			n := make([]byte, len(input))
+			copy(n, input)
+			n = append(n, byte(i))
+			pathes[i].Output = n
+			total := 0.0
+			entropy := s.SelfEntropy(n)
+			for _, value := range entropy {
+				total += value
+			}
+			pathes[i].Entropy = total
+		}
+		sort.Slice(pathes, func(i, j int) bool {
+			return pathes[i].Entropy < pathes[j].Entropy
+		})
+		index := split(pathes)
+		/*for _, path := range pathes[:index] {
+			fmt.Println(path.Entropy,
+				strings.Map(func(r rune) rune {
+					if unicode.IsPrint(r) {
+						return r
+					}
+					return -1
+				}, "("+string(path.Output))+")")
+		}*/
+		min, output := math.MaxFloat64, []byte{}
+		if depth <= 1 {
+			min, output = pathes[0].Entropy, pathes[0].Output
+		} else {
+			next := make(chan Result, 8)
+			for _, path := range pathes[:index] {
+				go search(depth-1, path.Output, next)
+			}
+			for range pathes[:index] {
+				result := <-next
+				if result.Entropy < min {
+					min, output = result.Entropy, result.Output
+				}
+			}
+		}
+		done <- Result{
+			Entropy: min,
+			Output:  output,
+		}
+	}
+	//padding := make([]byte, Order-2)
+	//in = append(padding, in...)
+	done := make(chan Result, 8)
+	go search(Depth, in, done)
+	result := <-done
+	result.Output = result.Output[:len(result.Output)-Depth+1]
+	fmt.Println(result.Entropy, string(result.Output))
+	fmt.Printf("\n")
+	for i := 0; i < 128; i++ {
+		search(Depth, result.Output, done)
+		result = <-done
+		result.Output = result.Output[:len(result.Output)-Depth+1]
+		fmt.Println(result.Entropy, string(result.Output))
+		fmt.Printf("\n")
 	}
 }
 

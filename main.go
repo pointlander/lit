@@ -335,7 +335,7 @@ func main() {
 		return
 	} else if *FlagSquare {
 		s := NewSquareRandom()
-		_ = s
+		s.markovSelfEntropy()
 		return
 	} else if *FlagEntropy != "" {
 		db, err := bolt.Open(*FlagModel, 0600, nil)
