@@ -121,6 +121,33 @@ func SelfEntropyKernel(Q, K, V, I Matrix) float64 {
 	return sum
 }
 
+// DirectSelfEntropyKernel computes the self entropy of Q, K, V
+func DirectSelfEntropyKernel(Q, K, V Matrix) []float64 {
+	entropies, values, results := make([]float64, V.Cols), make([]float64, K.Rows), make([]float64, 0, K.Rows)
+	V = T(V)
+	for i := 0; i < K.Rows; i++ {
+		K := K.Data[i*K.Cols : (i+1)*K.Cols]
+		for j := 0; j < Q.Rows; j++ {
+			Q := Q.Data[j*Q.Cols : (j+1)*Q.Cols]
+			values[j] = dot(K, Q)
+		}
+		softmax(values)
+
+		for j := 0; j < V.Rows; j++ {
+			V := V.Data[j*V.Cols : (j+1)*V.Cols]
+			entropies[j] = dot(values, V)
+		}
+		softmax(entropies)
+
+		entropy := 0.0
+		for _, e := range entropies {
+			entropy += e * math.Log(e)
+		}
+		results = append(results, entropy)
+	}
+	return results
+}
+
 // https://arxiv.org/abs/1511.05042
 func spherical(values []float64) {
 	sum := 0.0
@@ -461,7 +488,7 @@ func complexSpherical(values []complex64) {
 	}
 }
 
-// FastSelfEntropyKernel computes the fast complex self entropy of Q, K V
+// FastComplexSelfEntropyKernel computes the fast complex self entropy of Q, K V
 func FastComplexSelfEntropyKernel(Q, K, V, I ComplexMatrix) float64 {
 	entropies, values, sum := make([]complex64, V.Cols), make([]complex64, K.Rows), complex64(0.0)
 	V = ComplexT(V)
