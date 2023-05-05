@@ -659,6 +659,192 @@ func SelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 	return entropy
 }
 
+// DirectSelfEntropy calculates direct entropy
+func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
+	rnd := rand.New(rand.NewSource(1))
+	length := len(input)
+	weights := NewMatrix(0, 256, (length - Order + 1))
+	hmm := NewMatrix(0, 256, (length - Order + 1))
+	if len(context) > 0 {
+		hmm = NewMatrix(0, 256, (length-Order+1)+(len(context)-Order+1))
+	}
+	for i := 0; i < length-Order+1; i++ {
+		symbol := Symbols{}
+		for j := range symbol {
+			symbol[j] = input[i+j]
+		}
+		var decoded [Width]uint16
+		found := false
+		db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("markov"))
+			for j := 0; j < Order-1; j++ {
+				symbol := symbol
+				for k := 0; k < j; k++ {
+					symbol[k] = 0
+				}
+				v := b.Get(symbol[:])
+				if v != nil {
+					found = true
+					index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 2*Width)
+					compress.Mark1Decompress1(buffer, output)
+					for key := range decoded {
+						decoded[key] = uint16(output[index])
+						index++
+						decoded[key] |= uint16(output[index]) << 8
+						index++
+					}
+					return nil
+				}
+			}
+			return nil
+		})
+		a := decoded[:256]
+		var b []uint16
+		if Size == 2 {
+			b = decoded[256:]
+		}
+		if !found {
+			vector, sum := make([]float64, 256), float64(0.0)
+			for key := range vector {
+				v := rnd.Float64()
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			weights.Data = append(weights.Data, vector...)
+
+			if Size == 2 {
+				vector, sum = make([]float64, 256), float64(0.0)
+				for key := range vector {
+					v := rnd.Float64()
+					sum += v * v
+					vector[key] = v
+				}
+				length = math.Sqrt(sum)
+				for i, v := range vector {
+					vector[i] = v / length
+				}
+				hmm.Data = append(hmm.Data, vector...)
+			}
+		} else {
+			vector, sum := make([]float64, 256), float64(0.0)
+			for key, value := range a {
+				/*if value == math.MaxUint16 {
+					fmt.Println("max value")
+				}*/
+				v := float64(value)
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			weights.Data = append(weights.Data, vector...)
+
+			if Size == 2 {
+				vector, sum = make([]float64, 256), float64(0.0)
+				for key, value := range b {
+					/*if value == math.MaxUint16 {
+						fmt.Println("max value")
+					}*/
+					v := float64(value)
+					sum += v * v
+					vector[key] = v
+				}
+				length = math.Sqrt(sum)
+				for i, v := range vector {
+					vector[i] = v / length
+				}
+				hmm.Data = append(hmm.Data, vector...)
+			}
+		}
+	}
+
+	entropy := DirectSelfEntropyKernel(weights, weights, weights)
+
+	if len(context) == 0 {
+		if Size == 2 {
+			h := DirectSelfEntropyKernel(hmm, hmm, hmm)
+			for key, value := range h {
+				entropy[key] += value
+			}
+		}
+		return entropy
+	}
+
+	length = len(context)
+	for i := 0; i < length-Order+1; i++ {
+		symbol := Symbols{}
+		for j := range symbol {
+			symbol[j] = input[i+j]
+		}
+		var decoded [Width]uint16
+		found := false
+		db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("markov"))
+			for j := 0; j < Order-1; j++ {
+				symbol := symbol
+				for k := 0; k < j; k++ {
+					symbol[k] = 0
+				}
+				v := b.Get(symbol[:])
+				if v != nil {
+					found = true
+					index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 2*Width)
+					compress.Mark1Decompress1(buffer, output)
+					for key := range decoded {
+						decoded[key] = uint16(output[index])
+						index++
+						decoded[key] |= uint16(output[index]) << 8
+						index++
+					}
+					return nil
+				}
+			}
+			return nil
+		})
+		b := decoded[256:]
+		if !found {
+			vector, sum := make([]float64, 256), float64(0.0)
+			for key := range vector {
+				v := rnd.Float64()
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			hmm.Data = append(hmm.Data, vector...)
+		} else {
+			vector, sum := make([]float64, 256), float64(0.0)
+			for key, value := range b {
+				/*if value == math.MaxUint16 {
+					fmt.Println("max value")
+				}*/
+				v := float64(value)
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			hmm.Data = append(hmm.Data, vector...)
+		}
+	}
+
+	h := DirectSelfEntropyKernel(hmm, hmm, hmm)
+	for key, value := range h {
+		entropy[key] += value
+	}
+	return entropy
+}
+
 func split(pathes []Result) int {
 	sum := 0.0
 	for _, e := range pathes {
@@ -797,6 +983,82 @@ func markovSelfEntropy() {
 				total += value
 			}
 			pathes[i].Entropy = total
+		}
+		sort.Slice(pathes, func(i, j int) bool {
+			return pathes[i].Entropy < pathes[j].Entropy
+		})
+		index := split(pathes)
+		/*for _, path := range pathes[:index] {
+			fmt.Println(path.Entropy,
+				strings.Map(func(r rune) rune {
+					if unicode.IsPrint(r) {
+						return r
+					}
+					return -1
+				}, "("+string(path.Output))+")")
+		}*/
+		min, output := math.MaxFloat64, []byte{}
+		if depth <= 1 {
+			min, output = pathes[0].Entropy, pathes[0].Output
+		} else {
+			next := make(chan Result, 8)
+			for _, path := range pathes[:index] {
+				go search(depth-1, path.Output, next)
+			}
+			for range pathes[:index] {
+				result := <-next
+				if result.Entropy < min {
+					min, output = result.Entropy, result.Output
+				}
+			}
+		}
+		done <- Result{
+			Entropy: min,
+			Output:  output,
+		}
+	}
+	padding := make([]byte, Order-2)
+	in = append(padding, in...)
+	done := make(chan Result, 8)
+	go search(Depth, in, done)
+	result := <-done
+	result.Output = result.Output[:len(result.Output)-Depth+1]
+	fmt.Println(result.Entropy, string(result.Output))
+	fmt.Printf("\n")
+	for i := 0; i < 128; i++ {
+		search(Depth, result.Output, done)
+		result = <-done
+		result.Output = result.Output[:len(result.Output)-Depth+1]
+		fmt.Println(result.Entropy, string(result.Output))
+		fmt.Printf("\n")
+	}
+}
+
+func markovDirectSelfEntropy() {
+	db, err := bolt.Open(*FlagModel, 0600, nil)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	in := []byte(*FlagInput)
+	var search func(depth int, input []byte, done chan Result)
+	search = func(depth int, input []byte, done chan Result) {
+		pathes := make([]Result, Width)
+		for i := 0; i < Width; i++ {
+			n := make([]byte, len(input))
+			copy(n, input)
+			n = append(n, byte(i))
+			pathes[i].Output = n
+			pathes[i].Symbols = DirectSelfEntropy(db, n, nil)
+		}
+		s := NewMatrix(0, len(pathes[0].Symbols), Width)
+		for _, value := range pathes {
+			s.Data = append(s.Data, value.Symbols...)
+		}
+		entropy := DirectSelfEntropyKernel(s, s, s)
+		for i := range pathes {
+			pathes[i].Entropy = entropy[i]
 		}
 		sort.Slice(pathes, func(i, j int) bool {
 			return pathes[i].Entropy < pathes[j].Entropy

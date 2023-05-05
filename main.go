@@ -64,6 +64,7 @@ var (
 
 type Result struct {
 	Entropy float64
+	Symbols []float64
 	Output  []byte
 }
 
@@ -77,7 +78,7 @@ func main() {
 		markovComplexSelfEntropy()
 		return
 	} else if *FlagAttention {
-		markovSelfEntropy()
+		markovDirectSelfEntropy()
 		return
 	} else if *FlagDiffusion {
 		markovSelfEntropyDiffusion()
