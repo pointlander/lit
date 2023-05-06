@@ -122,7 +122,7 @@ func SelfEntropyKernel(Q, K, V, I Matrix) float64 {
 }
 
 // DirectSelfEntropyKernel computes the self entropy of Q, K, V
-func DirectSelfEntropyKernel(Q, K, V Matrix) []float64 {
+func DirectSelfEntropyKernel(Q, K, V, I Matrix) []float64 {
 	entropies, values, results := make([]float64, V.Cols), make([]float64, K.Rows), make([]float64, 0, K.Rows)
 	V = T(V)
 	for i := 0; i < K.Rows; i++ {
@@ -144,6 +144,11 @@ func DirectSelfEntropyKernel(Q, K, V Matrix) []float64 {
 			entropy += e * math.Log(e)
 		}
 		results = append(results, entropy)
+	}
+	if len(I.Data) > 0 {
+		for key, value := range results {
+			results[key] = value * I.Data[key]
+		}
 	}
 	return results
 }

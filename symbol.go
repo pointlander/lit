@@ -668,13 +668,14 @@ func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 	if len(context) > 0 {
 		hmm = NewMatrix(0, 256, (length-Order+1)+(len(context)-Order+1))
 	}
+	orders := make([]int, length-Order+1)
 	for i := 0; i < length-Order+1; i++ {
 		symbol := Symbols{}
 		for j := range symbol {
 			symbol[j] = input[i+j]
 		}
 		var decoded [Width]uint16
-		found := false
+		found, order := false, 0
 		db.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte("markov"))
 			for j := 0; j < Order-1; j++ {
@@ -684,7 +685,7 @@ func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 				}
 				v := b.Get(symbol[:])
 				if v != nil {
-					found = true
+					found, order = true, j
 					index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 2*Width)
 					compress.Mark1Decompress1(buffer, output)
 					for key := range decoded {
@@ -704,6 +705,7 @@ func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 			b = decoded[256:]
 		}
 		if !found {
+			orders[i] = Order - 1
 			vector, sum := make([]float64, 256), float64(0.0)
 			for key := range vector {
 				v := rnd.Float64()
@@ -730,6 +732,7 @@ func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 				hmm.Data = append(hmm.Data, vector...)
 			}
 		} else {
+			orders[i] = order
 			vector, sum := make([]float64, 256), float64(0.0)
 			for key, value := range a {
 				/*if value == math.MaxUint16 {
@@ -764,11 +767,16 @@ func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 		}
 	}
 
-	entropy := DirectSelfEntropyKernel(weights, weights, weights)
+	importance := NewMatrix(0, len(orders), 1)
+	for _, order := range orders {
+		importance.Data = append(importance.Data, 1/float64(Order-order))
+	}
+
+	entropy := DirectSelfEntropyKernel(weights, weights, weights, importance)
 
 	if len(context) == 0 {
 		if Size == 2 {
-			h := DirectSelfEntropyKernel(hmm, hmm, hmm)
+			h := DirectSelfEntropyKernel(hmm, hmm, hmm, importance)
 			for key, value := range h {
 				entropy[key] += value
 			}
@@ -777,13 +785,14 @@ func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 	}
 
 	length = len(context)
+	ordersHMM := make([]int, length-Order+1)
 	for i := 0; i < length-Order+1; i++ {
 		symbol := Symbols{}
 		for j := range symbol {
 			symbol[j] = input[i+j]
 		}
 		var decoded [Width]uint16
-		found := false
+		found, order := false, 0
 		db.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte("markov"))
 			for j := 0; j < Order-1; j++ {
@@ -793,7 +802,7 @@ func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 				}
 				v := b.Get(symbol[:])
 				if v != nil {
-					found = true
+					found, order = true, j
 					index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 2*Width)
 					compress.Mark1Decompress1(buffer, output)
 					for key := range decoded {
@@ -809,6 +818,8 @@ func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 		})
 		b := decoded[256:]
 		if !found {
+			ordersHMM[i] = Order - 1
+
 			vector, sum := make([]float64, 256), float64(0.0)
 			for key := range vector {
 				v := rnd.Float64()
@@ -821,6 +832,8 @@ func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 			}
 			hmm.Data = append(hmm.Data, vector...)
 		} else {
+			ordersHMM[i] = order
+
 			vector, sum := make([]float64, 256), float64(0.0)
 			for key, value := range b {
 				/*if value == math.MaxUint16 {
@@ -838,7 +851,15 @@ func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 		}
 	}
 
-	h := DirectSelfEntropyKernel(hmm, hmm, hmm)
+	importance = NewMatrix(0, len(orders)+len(ordersHMM), 1)
+	for _, order := range orders {
+		importance.Data = append(importance.Data, 1/float64(Order-order))
+	}
+	for _, order := range ordersHMM {
+		importance.Data = append(importance.Data, 1/float64(Order-order))
+	}
+
+	h := DirectSelfEntropyKernel(hmm, hmm, hmm, importance)
 	for key, value := range h {
 		entropy[key] += value
 	}
@@ -1056,7 +1077,7 @@ func markovDirectSelfEntropy() {
 		for _, value := range pathes {
 			s.Data = append(s.Data, value.Symbols...)
 		}
-		entropy := DirectSelfEntropyKernel(s, s, s)
+		entropy := DirectSelfEntropyKernel(s, s, s, Matrix{})
 		for i := range pathes {
 			pathes[i].Entropy = entropy[i]
 		}

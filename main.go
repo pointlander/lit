@@ -38,6 +38,8 @@ var (
 	FlagMarkov = flag.Bool("markov", false, "markov symbol vector mode")
 	// FlagAttention mode uses markov symbols with attention
 	FlagAttention = flag.Bool("attention", false, "markov symbol attention mode")
+	// FlagMeta mode uses attention of attention
+	FlagMeta = flag.Bool("meta", false, "attention of attention")
 	// FlagDiffusion is a diffusion based model
 	FlagDiffusion = flag.Bool("diffusion", false, "diffusion mode")
 	// FlagInput is the input into the markov model
@@ -78,6 +80,8 @@ func main() {
 		markovComplexSelfEntropy()
 		return
 	} else if *FlagAttention {
+		markovSelfEntropy()
+	} else if *FlagMeta {
 		markovDirectSelfEntropy()
 		return
 	} else if *FlagDiffusion {
