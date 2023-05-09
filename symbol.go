@@ -659,6 +659,85 @@ func SelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 	return entropy
 }
 
+// MutalSelfEntropy calculates mutual entropy
+func MutualSelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
+	rnd := rand.New(rand.NewSource(1))
+	length := len(input)
+	weights := NewMatrix(0, 256, (length - Order + 1))
+	orders := make([]int, length-Order+1)
+	for i := 0; i < length-Order+1; i++ {
+		symbol := Symbols{}
+		for j := range symbol {
+			symbol[j] = input[i+j]
+		}
+		var decoded [Width]uint16
+		found, order := false, 0
+		db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("markov"))
+			for j := 0; j < Order-1; j++ {
+				symbol := symbol
+				for k := 0; k < j; k++ {
+					symbol[k] = 0
+				}
+				v := b.Get(symbol[:])
+				if v != nil {
+					found, order = true, j
+					index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 2*Width)
+					compress.Mark1Decompress1(buffer, output)
+					for key := range decoded {
+						decoded[key] = uint16(output[index])
+						index++
+						decoded[key] |= uint16(output[index]) << 8
+						index++
+					}
+					return nil
+				}
+			}
+			return nil
+		})
+		a := decoded[:256]
+		if !found {
+			orders[i] = Order - 1
+			vector, sum := make([]float64, 256), float64(0.0)
+			for key := range vector {
+				v := rnd.Float64()
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			weights.Data = append(weights.Data, vector...)
+		} else {
+			orders[i] = order
+			vector, sum := make([]float64, 256), float64(0.0)
+			for key, value := range a {
+				/*if value == math.MaxUint16 {
+					fmt.Println("max value")
+				}*/
+				v := float64(value)
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			weights.Data = append(weights.Data, vector...)
+		}
+	}
+
+	importance := NewMatrix(0, len(orders), 1)
+	for _, order := range orders {
+		importance.Data = append(importance.Data, 1/float64(Order-order))
+	}
+
+	entropy := DirectSelfEntropyKernel(weights, weights, weights, importance)
+
+	return entropy
+}
+
 // DirectSelfEntropy calculates direct entropy
 func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 	rnd := rand.New(rand.NewSource(1))
