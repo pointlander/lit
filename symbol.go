@@ -923,12 +923,15 @@ func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 	}
 
 	entropy := DirectSelfEntropyKernel(weights, weights, weights, importance)
+	for key, value := range entropy {
+		entropy[key] = -value
+	}
 
 	if len(context) == 0 {
 		if Size == 2 {
 			h := DirectSelfEntropyKernel(hmm, hmm, hmm, importance)
 			for key, value := range h {
-				entropy[key] += value
+				entropy[key] -= value
 			}
 		}
 		return entropy
@@ -1011,7 +1014,7 @@ func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 
 	h := DirectSelfEntropyKernel(hmm, hmm, hmm, importance)
 	for key, value := range h {
-		entropy[key] += value
+		entropy[key] -= value
 	}
 	return entropy
 }
