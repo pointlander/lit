@@ -803,8 +803,7 @@ func MutualSelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 	entropy := DirectSelfEntropyKernel(weights, weights, weights, Matrix{})
 
 	for i := 0; i < 256; i++ {
-		e[i] -= entropy[(length-Order+1)+i]
-		e[i] *= importance.Data[i]
+		e[i] = (-e[i] + entropy[(length-Order+1)+i]) * importance.Data[i]
 	}
 
 	return e
