@@ -9,6 +9,7 @@ import (
 	"math"
 	"math/cmplx"
 	"math/rand"
+	"runtime"
 
 	"github.com/pointlander/pagerank"
 )
@@ -144,6 +145,56 @@ func DirectSelfEntropyKernel(Q, K, V, I Matrix) []float64 {
 			entropy += e * math.Log(e)
 		}
 		results = append(results, entropy)
+	}
+	if len(I.Data) > 0 {
+		for key, value := range results {
+			results[key] = value * I.Data[key]
+		}
+	}
+	return results
+}
+
+// DirectSelfEntropyKernelParallel computes the self entropy of Q, K, V in parallel
+func DirectSelfEntropyKernelParallel(Q, K, V, I Matrix) []float64 {
+	entropies, values, results := make([]float64, V.Cols), make([]float64, K.Rows), make([]float64, K.Rows)
+	V = T(V)
+	done := make(chan bool, 8)
+	row := func(i int) {
+		K := K.Data[i*K.Cols : (i+1)*K.Cols]
+		for j := 0; j < Q.Rows; j++ {
+			Q := Q.Data[j*Q.Cols : (j+1)*Q.Cols]
+			values[j] = dot(K, Q)
+		}
+		softmax(values)
+
+		for j := 0; j < V.Rows; j++ {
+			V := V.Data[j*V.Cols : (j+1)*V.Cols]
+			entropies[j] = dot(values, V)
+		}
+		softmax(entropies)
+
+		entropy := 0.0
+		for _, e := range entropies {
+			entropy += e * math.Log(e)
+		}
+		results[i] = entropy
+		done <- true
+	}
+	cpus, flight, i := runtime.NumCPU(), 0, 0
+	for i < K.Rows && flight < cpus {
+		go row(i)
+		flight++
+		i++
+	}
+	for i < K.Rows {
+		<-done
+		flight--
+		go row(i)
+		flight++
+		i++
+	}
+	for j := 0; j < flight; j++ {
+		<-done
 	}
 	if len(I.Data) > 0 {
 		for key, value := range results {

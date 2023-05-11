@@ -359,6 +359,9 @@ func main() {
 		return
 	}
 
-	v := NewVectors("cc.en.300.vec.gz")
-	v.Test()
+	//v := NewVectors("cc.en.300.vec.gz")
+	//v.Test()
+	m := NewMatrix(0, 256, 256*256)
+	m.Data = m.Data[:256*256*256]
+	DirectSelfEntropyKernelParallel(m, m, m, Matrix{})
 }
