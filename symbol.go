@@ -22,7 +22,7 @@ import (
 )
 
 // Symbols is a set of ordered symbols
-type Symbols [Order]uint8
+type Symbols [len(Indexes)]uint8
 
 // SymbolVectors are markov symbol vectors
 type SymbolVectors map[Symbols]map[uint64]uint16
@@ -117,7 +117,7 @@ func (s *LRU) Learn(data []byte) {
 		for j := range symbols {
 			symbols[j] = data[i+Indexes[j]]
 		}
-		for j := 0; j < Order-1; j++ {
+		for j := 0; j < len(Indexes)-1; j++ {
 			symbols := symbols
 			for k := 0; k < j; k++ {
 				symbols[k] = 0
@@ -476,7 +476,7 @@ func SelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 		found, order := false, 0
 		db.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte("markov"))
-			for j := 0; j < Order-1; j++ {
+			for j := 0; j < len(Indexes)-1; j++ {
 				symbol := symbol
 				for k := 0; k < j; k++ {
 					symbol[k] = 0
@@ -591,7 +591,7 @@ func SelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 		found, order := false, 0
 		db.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte("markov"))
-			for j := 0; j < Order-1; j++ {
+			for j := 0; j < len(Indexes)-1; j++ {
 				symbol := symbol
 				for k := 0; k < j; k++ {
 					symbol[k] = 0
@@ -674,7 +674,7 @@ func MutualSelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 		found := false
 		db.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte("markov"))
-			for j := 0; j < Order-1; j++ {
+			for j := 0; j < len(Indexes)-1; j++ {
 				symbol := symbol
 				for k := 0; k < j; k++ {
 					symbol[k] = 0
@@ -737,7 +737,7 @@ func MutualSelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 		found, order := false, 0
 		db.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte("markov"))
-			for j := 0; j < Order-1; j++ {
+			for j := 0; j < len(Indexes)-1; j++ {
 				symbol := symbol
 				for k := 0; k < j; k++ {
 					symbol[k] = 0
@@ -827,7 +827,7 @@ func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 		found, order := false, 0
 		db.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte("markov"))
-			for j := 0; j < Order-1; j++ {
+			for j := 0; j < len(Indexes)-1; j++ {
 				symbol := symbol
 				for k := 0; k < j; k++ {
 					symbol[k] = 0
@@ -947,7 +947,7 @@ func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 		found, order := false, 0
 		db.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte("markov"))
-			for j := 0; j < Order-1; j++ {
+			for j := 0; j < len(Indexes)-1; j++ {
 				symbol := symbol
 				for k := 0; k < j; k++ {
 					symbol[k] = 0
