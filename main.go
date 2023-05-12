@@ -31,6 +31,9 @@ const (
 	Width = Size * 256
 )
 
+// Indexes are the context indexes for the markov model
+var Indexes = [Order]int{0, 1, 2, 3, 4, 5, 6, 7, 8}
+
 var (
 	// FlagSquare uses square markov model
 	FlagSquare = flag.Bool("square", false, "square markov model")

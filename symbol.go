@@ -110,10 +110,13 @@ func NewSymbolVectorsRandom() LRU {
 // Learn learns a markov model from data
 func (s *LRU) Learn(data []byte) {
 	var symbols Symbols
-	if len(data) < 32 {
+	if len(data) < Order {
 		return
 	}
-	for i, symbol := range data[:len(data)-32+1] {
+	for i, symbol := range data[:len(data)-Order+1] {
+		for j := range symbols {
+			symbols[j] = data[i+Indexes[j]]
+		}
 		for j := 0; j < Order-1; j++ {
 			symbols := symbols
 			for k := 0; k < j; k++ {
@@ -171,10 +174,6 @@ func (s *LRU) Learn(data []byte) {
 
 			s.Flush()
 		}
-		for i, value := range symbols[1:] {
-			symbols[i] = value
-		}
-		symbols[Order-1] = symbol
 	}
 }
 
@@ -471,7 +470,7 @@ func SelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 	for i := 0; i < length-Order+1; i++ {
 		symbol := Symbols{}
 		for j := range symbol {
-			symbol[j] = input[i+j]
+			symbol[j] = input[i+Indexes[j]]
 		}
 		var decoded [Width]uint16
 		found, order := false, 0
@@ -586,7 +585,7 @@ func SelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 	for i := 0; i < length-Order+1; i++ {
 		symbol := Symbols{}
 		for j := range symbol {
-			symbol[j] = input[i+j]
+			symbol[j] = input[i+Indexes[j]]
 		}
 		var decoded [Width]uint16
 		found, order := false, 0
@@ -669,7 +668,7 @@ func MutualSelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 	for i := 0; i < length-Order+1; i++ {
 		symbol := Symbols{}
 		for j := range symbol {
-			symbol[j] = input[i+j]
+			symbol[j] = input[i+Indexes[j]]
 		}
 		var decoded [Width]uint16
 		found := false
@@ -822,7 +821,7 @@ func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 	for i := 0; i < length-Order+1; i++ {
 		symbol := Symbols{}
 		for j := range symbol {
-			symbol[j] = input[i+j]
+			symbol[j] = input[i+Indexes[j]]
 		}
 		var decoded [Width]uint16
 		found, order := false, 0
@@ -942,7 +941,7 @@ func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 	for i := 0; i < length-Order+1; i++ {
 		symbol := Symbols{}
 		for j := range symbol {
-			symbol[j] = input[i+j]
+			symbol[j] = input[i+Indexes[j]]
 		}
 		var decoded [Width]uint16
 		found, order := false, 0
