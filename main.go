@@ -32,7 +32,8 @@ const (
 )
 
 // Indexes are the context indexes for the markov model
-var Indexes = [Order]int{0, 1, 2, 3, 4, 5, 6, 7, 8}
+//var Indexes = [Order]int{0, 1, 2, 3, 4, 5, 6, 7, 8}
+var Indexes = [4]int{0, 4, 7, 8}
 
 var (
 	// FlagSquare uses square markov model
@@ -139,16 +140,16 @@ func main() {
 		graph := pagerank.NewGraph64()
 		for i := 0; i < Width*Width; i++ {
 			x := Symbols{}
-			x[Order-2] = byte(i >> 8)
-			x[Order-1] = byte(i & 0xff)
+			x[len(Indexes)-2] = byte(i >> 8)
+			x[len(Indexes)-1] = byte(i & 0xff)
 			found, a := lookup(x)
 			if !found {
 				continue
 			}
 			for j := 0; j < Width*Width; j++ {
 				y := Symbols{}
-				y[Order-2] = byte(j >> 8)
-				y[Order-1] = byte(j & 0xff)
+				y[len(Indexes)-2] = byte(j >> 8)
+				y[len(Indexes)-1] = byte(j & 0xff)
 				found, b := lookup(y)
 				if !found {
 					continue

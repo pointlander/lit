@@ -728,10 +728,10 @@ func MutualSelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 	for s := 0; s < 256; s++ {
 		i := length - Order + 1
 		symbol := Symbols{}
-		for j := range symbol[:Order-1] {
+		for j := range symbol[:len(Indexes)-1] {
 			symbol[j] = input[i+j]
 		}
-		symbol[Order-1] = byte(s)
+		symbol[len(Indexes)-1] = byte(s)
 
 		var decoded [Width]uint16
 		found, order := false, 0
