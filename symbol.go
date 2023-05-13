@@ -113,7 +113,8 @@ func (s *LRU) Learn(data []byte) {
 	if len(data) < Order {
 		return
 	}
-	for i, symbol := range data[:len(data)-Order+1] {
+	for i := range data[:len(data)-Order] {
+		symbol := uint64(data[i+Order])
 		for j := range symbols {
 			symbols[j] = data[i+Indexes[j]]
 		}
@@ -134,7 +135,7 @@ func (s *LRU) Learn(data []byte) {
 				}
 				vector[uint64(symbol)] += 1
 			}
-			for j := 1; j < Order; j++ {
+			/*for j := 1; j < Order; j++ {
 				if vector[uint64(data[i+j])] < math.MaxUint16 {
 					vector[uint64(data[i+j])] += 1
 				} else {
@@ -145,7 +146,7 @@ func (s *LRU) Learn(data []byte) {
 					}
 					vector[uint64(data[i+j])] += 1
 				}
-			}
+			}*/
 
 			if Size == 2 {
 				if vector[256+uint64(symbol)] < math.MaxUint16 {
