@@ -33,6 +33,7 @@ const (
 
 // Indexes are the context indexes for the markov model
 //var Indexes = [Order]int{0, 1, 2, 3, 4, 5, 6, 7, 8}
+
 var Indexes = [4]int{0, 4, 7, 8}
 
 var (
@@ -317,9 +318,7 @@ func main() {
 				db.Update(func(tx *bolt.Tx) error {
 					b := tx.Bucket([]byte("markov"))
 					for _, pair := range pairs {
-						buffer := bytes.Buffer{}
-						compress.Mark1Compress1(pair.Value, &buffer)
-						err := b.Put(pair.Key, buffer.Bytes())
+						err := b.Put(pair.Key, pair.Value)
 						if err != nil {
 							return err
 						}
@@ -334,9 +333,7 @@ func main() {
 			db.Update(func(tx *bolt.Tx) error {
 				b := tx.Bucket([]byte("markov"))
 				for _, pair := range pairs[:i] {
-					buffer := bytes.Buffer{}
-					compress.Mark1Compress1(pair.Value, &buffer)
-					err := b.Put(pair.Key, buffer.Bytes())
+					err := b.Put(pair.Key, pair.Value)
 					if err != nil {
 						return err
 					}
