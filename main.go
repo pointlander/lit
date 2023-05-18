@@ -20,7 +20,7 @@ import (
 
 const (
 	// Order is the order of the markov word vector model
-	Order = 8
+	Order = 9
 	// ComplexOrder is the order of the markov word complex vector model
 	ComplexOrder = 2
 	// Depth is the depth of the search
@@ -32,8 +32,9 @@ const (
 )
 
 // Indexes are the context indexes for the markov model
-var Indexes = [Order]int{0, 1, 2, 3, 4, 5, 6, 7}
-//var Indexes = [5]int{0, 3, 5, 7, 8}
+//var Indexes = [Order]int{0, 1, 2, 3, 4, 5, 6, 7, 8}
+
+var Indexes = [4]int{0, 4, 7, 8}
 
 var (
 	// FlagSquare uses square markov model
@@ -317,9 +318,7 @@ func main() {
 				db.Update(func(tx *bolt.Tx) error {
 					b := tx.Bucket([]byte("markov"))
 					for _, pair := range pairs {
-						buffer := bytes.Buffer{}
-						compress.Mark1Compress1(pair.Value, &buffer)
-						err := b.Put(pair.Key, buffer.Bytes())
+						err := b.Put(pair.Key, pair.Value)
 						if err != nil {
 							return err
 						}
@@ -334,9 +333,7 @@ func main() {
 			db.Update(func(tx *bolt.Tx) error {
 				b := tx.Bucket([]byte("markov"))
 				for _, pair := range pairs[:i] {
-					buffer := bytes.Buffer{}
-					compress.Mark1Compress1(pair.Value, &buffer)
-					err := b.Put(pair.Key, buffer.Bytes())
+					err := b.Put(pair.Key, pair.Value)
 					if err != nil {
 						return err
 					}
