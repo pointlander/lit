@@ -110,10 +110,10 @@ func NewSymbolVectorsRandom() LRU {
 // Learn learns a markov model from data
 func (s *LRU) Learn(data []byte) {
 	var symbols Symbols
-	if len(data) < Order {
+	if len(data) < 2*Order {
 		return
 	}
-	for i := range data[:len(data)-Order] {
+	for i := range data[:len(data)-2*Order] {
 		symbol := uint64(data[i+Order])
 		for j := range symbols {
 			symbols[j] = data[i+Indexes[j]]
@@ -135,18 +135,18 @@ func (s *LRU) Learn(data []byte) {
 				}
 				vector[uint64(symbol)] += 1
 			}
-			/*for j := 1; j < Order; j++ {
-				if vector[uint64(data[i+j])] < math.MaxUint16 {
-					vector[uint64(data[i+j])] += 1
+			for j := 1; j < Order; j++ {
+				if vector[uint64(data[i+j+Order])] < math.MaxUint16 {
+					vector[uint64(data[i+j+Order])] += 1
 				} else {
 					for key, value := range vector {
 						if key < 256 {
 							vector[key] = value >> 1
 						}
 					}
-					vector[uint64(data[i+j])] += 1
+					vector[uint64(data[i+j+Order])] += 1
 				}
-			}*/
+			}
 
 			if Size == 2 {
 				if vector[256+uint64(symbol)] < math.MaxUint16 {

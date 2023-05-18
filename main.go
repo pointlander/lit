@@ -20,7 +20,7 @@ import (
 
 const (
 	// Order is the order of the markov word vector model
-	Order = 9
+	Order = 8
 	// ComplexOrder is the order of the markov word complex vector model
 	ComplexOrder = 2
 	// Depth is the depth of the search
@@ -32,8 +32,8 @@ const (
 )
 
 // Indexes are the context indexes for the markov model
-//var Indexes = [Order]int{0, 1, 2, 3, 4, 5, 6, 7, 8}
-var Indexes = [4]int{0, 4, 7, 8}
+var Indexes = [Order]int{0, 1, 2, 3, 4, 5, 6, 7}
+//var Indexes = [5]int{0, 3, 5, 7, 8}
 
 var (
 	// FlagSquare uses square markov model
