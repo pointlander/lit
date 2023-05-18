@@ -9,7 +9,7 @@ import (
 )
 
 func TestLRU(t *testing.T) {
-	lru := NewLRU(3)
+	lru := NewLRU(8)
 	for i := 0; i < 12; i++ {
 		_, ok := lru.Get(Symbols{uint8(i)})
 		if ok {
@@ -80,7 +80,7 @@ func TestLRU(t *testing.T) {
 	check(8, []uint8{8, 10, 11, 9})
 	check(8, []uint8{8, 10, 11, 9})
 
-	lru = NewLRU(1)
+	lru = NewLRU(2)
 	if _, ok := lru.Get(Symbols{0}); ok {
 		t.Fatal("should not find key 0")
 	}
