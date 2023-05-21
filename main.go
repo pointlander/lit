@@ -6,8 +6,10 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"os"
 	"sort"
@@ -360,9 +362,20 @@ func main() {
 		return
 	}
 
+	data, err := ioutil.ReadFile("train-v2.0.json")
+	if err != nil {
+		panic(err)
+	}
+	var squad Squad
+	err = json.Unmarshal(data, &squad)
+	if err != nil {
+		panic(err)
+	}
+
 	//v := NewVectors("cc.en.300.vec.gz")
 	//v.Test()
-	m := NewMatrix(0, 256, 256*256)
-	m.Data = m.Data[:256*256*256]
-	DirectSelfEntropyKernelParallel(m, m, m, Matrix{})
+
+	//m := NewMatrix(0, 256, 256*256)
+	//m.Data = m.Data[:256*256*256]
+	//DirectSelfEntropyKernelParallel(m, m, m, Matrix{})
 }
