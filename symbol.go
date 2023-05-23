@@ -809,6 +809,155 @@ func MutualSelfEntropy(db *bolt.DB, input []byte) (ax []float64) {
 	return e
 }
 
+// MutalSelfEntropyUnitVector calculates mutual entropy as an unweighted unit vector
+func MutualSelfEntropyUnitVector(db *bolt.DB, input []byte) (ax []float64) {
+	rnd := rand.New(rand.NewSource(1))
+	length := len(input)
+	aa := NewMatrix(0, 256, 256)
+	weights := NewMatrix(0, 256, (length-Order+1)+256)
+	for i := 0; i < length-Order+1; i++ {
+		symbol := Symbols{}
+		for j := range symbol {
+			symbol[j] = input[i+Indexes[j]]
+		}
+		var decoded [Width]uint16
+		found := false
+		db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("markov"))
+			for j := 0; j < len(Indexes)-1; j++ {
+				symbol := symbol
+				for k := 0; k < j; k++ {
+					symbol[k] = 0
+				}
+				v := b.Get(symbol[:])
+				if v != nil {
+					found = true
+					index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 2*Width)
+					compress.Mark1Decompress1(buffer, output)
+					for key := range decoded {
+						decoded[key] = uint16(output[index])
+						index++
+						decoded[key] |= uint16(output[index]) << 8
+						index++
+					}
+					return nil
+				}
+			}
+			return nil
+		})
+		a := decoded[:256]
+		if !found {
+			vector, sum := make([]float64, 256), float64(0.0)
+			for key := range vector {
+				v := rnd.Float64()
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			weights.Data = append(weights.Data, vector...)
+		} else {
+			vector, sum := make([]float64, 256), float64(0.0)
+			for key, value := range a {
+				/*if value == math.MaxUint16 {
+					fmt.Println("max value")
+				}*/
+				v := float64(value)
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			weights.Data = append(weights.Data, vector...)
+		}
+	}
+	for s := 0; s < 256; s++ {
+		i := length - Order + 1
+		symbol := Symbols{}
+		for j := range symbol[:len(Indexes)-1] {
+			symbol[j] = input[i+j]
+		}
+		symbol[len(Indexes)-1] = byte(s)
+
+		var decoded [Width]uint16
+		found := false
+		db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("markov"))
+			for j := 0; j < len(Indexes)-1; j++ {
+				symbol := symbol
+				for k := 0; k < j; k++ {
+					symbol[k] = 0
+				}
+				v := b.Get(symbol[:])
+				if v != nil {
+					found = true
+					index, buffer, output := 0, bytes.NewBuffer(v), make([]byte, 2*Width)
+					compress.Mark1Decompress1(buffer, output)
+					for key := range decoded {
+						decoded[key] = uint16(output[index])
+						index++
+						decoded[key] |= uint16(output[index]) << 8
+						index++
+					}
+					return nil
+				}
+			}
+			return nil
+		})
+		a := decoded[:256]
+		if !found {
+			vector, sum := make([]float64, 256), float64(0.0)
+			for key := range vector {
+				v := rnd.Float64()
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			weights.Data = append(weights.Data, vector...)
+			aa.Data = append(aa.Data, vector...)
+		} else {
+			vector, sum := make([]float64, 256), float64(0.0)
+			for key, value := range a {
+				/*if value == math.MaxUint16 {
+					fmt.Println("max value")
+				}*/
+				v := float64(value)
+				sum += v * v
+				vector[key] = v
+			}
+			length := math.Sqrt(sum)
+			for i, v := range vector {
+				vector[i] = v / length
+			}
+			weights.Data = append(weights.Data, vector...)
+			aa.Data = append(aa.Data, vector...)
+		}
+	}
+
+	e := DirectSelfEntropyKernel(aa, aa, aa, Matrix{})
+	entropy := DirectSelfEntropyKernel(weights, weights, weights, Matrix{})
+
+	sum := 0.0
+	for i := 0; i < 256; i++ {
+		a := -e[i] + entropy[(length-Order+1)+i]
+		e[i] = a
+		sum += a * a
+	}
+	l := math.Sqrt(sum)
+	for i := range e {
+		e[i] /= l
+	}
+
+	return e
+}
+
 // DirectSelfEntropy calculates direct entropy
 func DirectSelfEntropy(db *bolt.DB, input, context []byte) (ax []float64) {
 	rnd := rand.New(rand.NewSource(1))
