@@ -388,6 +388,24 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	type TrainingPair struct {
+		Question string
+		Answer   string
+	}
+	training := []TrainingPair{}
+	for _, data := range squad.Data {
+		for _, paragraph := range data.Paragraphs {
+			for _, question := range paragraph.Qas {
+				if question.IsImpossible {
+					continue
+				}
+				training = append(training, TrainingPair{
+					Question: question.Question,
+					Answer:   question.Answers[0].Text,
+				})
+			}
+		}
+	}
 
 	rnd := rand.New(rand.NewSource(1))
 
