@@ -93,7 +93,7 @@ const (
 	// B2 exponential decay rate for the second-moment estimates
 	B2 = 0.999
 	// Eta is the learning rate
-	Eta = .3
+	Eta = .001
 )
 
 func main() {
@@ -379,6 +379,12 @@ func main() {
 		return
 	}
 
+	db, err := bolt.Open(*FlagModel, 0600, nil)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
 	data, err := ioutil.ReadFile("train-v2.0.json")
 	if err != nil {
 		panic(err)
@@ -389,8 +395,8 @@ func main() {
 		panic(err)
 	}
 	type TrainingPair struct {
-		Question string
-		Answer   string
+		Question []byte
+		Answer   []byte
 	}
 	training := []TrainingPair{}
 	for _, data := range squad.Data {
@@ -400,8 +406,8 @@ func main() {
 					continue
 				}
 				training = append(training, TrainingPair{
-					Question: question.Question,
-					Answer:   question.Answers[0].Text,
+					Question: []byte(question.Question),
+					Answer:   []byte(question.Answers[0].Text),
 				})
 			}
 		}
@@ -435,16 +441,15 @@ func main() {
 
 	others := tf32.NewSet()
 	others.Add("inputs", 256, 100)
+	others.Add("outputs", 256, 100)
 	inputs := others.ByName["inputs"]
 	inputs.X = inputs.X[:cap(inputs.X)]
-
-	for i := range inputs.X {
-		inputs.X[i] = rnd.Float32()
-	}
+	outputs := others.ByName["outputs"]
+	outputs.X = outputs.X[:cap(outputs.X)]
 
 	l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), others.Get("inputs")), set.Get("b1")))
 	l2 := tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2"))
-	cost := tf32.Sum(tf32.Quadratic(others.Get("inputs"), l2))
+	cost := tf32.Sum(tf32.Quadratic(others.Get("outputs"), l2))
 
 	i := 1
 	pow := func(x float32) float32 {
@@ -458,6 +463,25 @@ func main() {
 	// The stochastic gradient descent loop
 	for i < 100 {
 		start := time.Now()
+
+		j := 0
+		for j < 100 {
+			pair := training[rnd.Intn(len(training))]
+			input := make([]byte, len(pair.Question))
+			copy(input, pair.Question)
+			index := rand.Intn(len(pair.Answer))
+			input = append(input, pair.Answer[:index]...)
+			if len(input) < len(Indexes) {
+				continue
+			}
+			entropy := MutualSelfEntropyUnitVector(db, input)
+			for key, value := range entropy {
+				inputs.X[j*256+key] = float32(value)
+				outputs.X[j*256+key] = 0
+			}
+			outputs.X[j*256+int(pair.Answer[index])] = 1
+			j++
+		}
 		// Calculate the gradients
 		total := tf32.Gradient(cost).X[0]
 
