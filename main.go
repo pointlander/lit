@@ -416,9 +416,9 @@ func main() {
 	rnd := rand.New(rand.NewSource(1))
 
 	set := tf32.NewSet()
-	set.Add("w1", 256, 1024)
-	set.Add("b1", 1024, 1)
-	set.Add("w2", 2048, 256)
+	set.Add("w1", 256, 2*1024)
+	set.Add("b1", 2*1024, 1)
+	set.Add("w2", 4*1024, 256)
 	set.Add("b2", 256, 1)
 	for _, w := range set.Weights {
 		if strings.HasPrefix(w.N, "b") {
@@ -485,11 +485,23 @@ func main() {
 		// Calculate the gradients
 		total := tf32.Gradient(cost).X[0]
 
+		sum := float32(0.0)
+		for _, p := range set.Weights {
+			for _, d := range p.D {
+				sum += d * d
+			}
+		}
+		norm := float32(math.Sqrt(float64(sum)))
+		scaling := float32(1.0)
+		if norm > 1 {
+			scaling = 1 / norm
+		}
+
 		// Update the point weights with the partial derivatives using adam
 		b1, b2 := pow(B1), pow(B2)
 		for j, w := range set.Weights {
 			for k, d := range w.D {
-				g := d
+				g := d * scaling
 				m := B1*w.States[StateM][k] + (1-B1)*g
 				v := B2*w.States[StateV][k] + (1-B2)*g*g
 				w.States[StateM][k] = m
