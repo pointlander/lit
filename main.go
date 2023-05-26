@@ -93,7 +93,7 @@ const (
 	// B2 exponential decay rate for the second-moment estimates
 	B2 = 0.999
 	// Eta is the learning rate
-	Eta = .001
+	Eta = .00001
 )
 
 func main() {
@@ -448,8 +448,8 @@ func main() {
 	outputs.X = outputs.X[:cap(outputs.X)]
 
 	l1 := tf32.Everett(tf32.Add(tf32.Mul(set.Get("w1"), others.Get("inputs")), set.Get("b1")))
-	l2 := tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2"))
-	cost := tf32.Sum(tf32.Quadratic(others.Get("outputs"), l2))
+	l2 := tf32.Softmax(tf32.Add(tf32.Mul(set.Get("w2"), l1), set.Get("b2")))
+	cost := tf32.Avg(tf32.CrossEntropy(l2, others.Get("outputs")))
 
 	i := 1
 	pow := func(x float32) float32 {
@@ -461,7 +461,7 @@ func main() {
 	}
 	points := make(plotter.XYs, 0, 8)
 	// The stochastic gradient descent loop
-	for i < 100 {
+	for i < 1024 {
 		start := time.Now()
 
 		j := 0
